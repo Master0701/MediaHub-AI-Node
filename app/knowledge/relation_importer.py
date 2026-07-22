@@ -91,36 +91,19 @@ class KnowledgeRelationImporter:
 
         if source.id == target.id:
             raise KnowledgeRelationImportError(
-                "Quelle und Ziel dürfen nicht "
-                "derselbe Wissenseintrag sein."
+                "Quelle und Ziel dürfen nicht derselbe Wissenseintrag sein."
             )
 
-        relation_type = normalize_relation_type(
-            request.relation_type
-        )
+        relation_type = normalize_relation_type(request.relation_type)
 
         if not relation_type:
-            raise KnowledgeRelationImportError(
-                "Ein Beziehungstyp ist erforderlich."
-            )
+            raise KnowledgeRelationImportError("Ein Beziehungstyp ist erforderlich.")
 
-        order_type = (
-            normalize_relation_type(
-                request.order_type
-            )
-            if request.order_type
-            else None
-        )
+        order_type = normalize_relation_type(request.order_type) if request.order_type else None
 
-        position = self._normalize_position(
-            request.position
-        )
+        position = self._normalize_position(request.position)
 
-        notes = (
-            request.notes.strip()
-            if request.notes
-            else None
-        )
+        notes = request.notes.strip() if request.notes else None
 
         existing = self._find_existing_relation(
             source_id=source.id,
@@ -132,10 +115,7 @@ class KnowledgeRelationImporter:
         if existing is not None:
             changed = False
 
-            if (
-                existing.position is None
-                and position is not None
-            ):
+            if existing.position is None and position is not None:
                 existing.position = position
                 changed = True
 
@@ -151,24 +131,15 @@ class KnowledgeRelationImporter:
 
             if dry_run:
                 return KnowledgeRelationImportResult(
-                    status=(
-                        "would_update"
-                        if changed
-                        else "unchanged"
-                    ),
+                    status=("would_update" if changed else "unchanged"),
                     relation_id=existing.id,
-                    relation=relation_to_dict(
-                        existing
-                    ),
+                    relation=relation_to_dict(existing),
                     source_id=source.id,
                     target_id=target.id,
                     message=(
-                        "Die vorhandene Beziehung "
-                        "würde ergänzt."
+                        "Die vorhandene Beziehung würde ergänzt."
                         if changed
-                        else
-                        "Die Beziehung ist bereits "
-                        "vollständig vorhanden."
+                        else "Die Beziehung ist bereits vollständig vorhanden."
                     ),
                 )
 
@@ -181,24 +152,15 @@ class KnowledgeRelationImporter:
                         self.db.refresh(existing)
 
                 return KnowledgeRelationImportResult(
-                    status=(
-                        "updated"
-                        if changed
-                        else "unchanged"
-                    ),
+                    status=("updated" if changed else "unchanged"),
                     relation_id=existing.id,
-                    relation=relation_to_dict(
-                        existing
-                    ),
+                    relation=relation_to_dict(existing),
                     source_id=source.id,
                     target_id=target.id,
                     message=(
-                        "Vorhandene Beziehung wurde "
-                        "ergänzt."
+                        "Vorhandene Beziehung wurde ergänzt."
                         if changed
-                        else
-                        "Die Beziehung war bereits "
-                        "vorhanden."
+                        else "Die Beziehung war bereits vorhanden."
                     ),
                 )
 
@@ -220,10 +182,7 @@ class KnowledgeRelationImporter:
                 },
                 source_id=source.id,
                 target_id=target.id,
-                message=(
-                    "Die Beziehung würde neu "
-                    "angelegt."
-                ),
+                message=("Die Beziehung würde neu angelegt."),
             )
 
         relation = KnowledgeRelation(
@@ -246,14 +205,10 @@ class KnowledgeRelationImporter:
             return KnowledgeRelationImportResult(
                 status="created",
                 relation_id=relation.id,
-                relation=relation_to_dict(
-                    relation
-                ),
+                relation=relation_to_dict(relation),
                 source_id=source.id,
                 target_id=target.id,
-                message=(
-                    "Neue Beziehung wurde erstellt."
-                ),
+                message=("Neue Beziehung wurde erstellt."),
             )
 
         except Exception:
@@ -274,59 +229,37 @@ class KnowledgeRelationImporter:
 
             if item is None:
                 raise KnowledgeRelationImportError(
-                    f"{role} wurde nicht gefunden: "
-                    f"ID {reference.item_id}"
+                    f"{role} wurde nicht gefunden: ID {reference.item_id}"
                 )
 
             return item
 
-        title = (
-            reference.title.strip()
-            if reference.title
-            else ""
-        )
+        title = reference.title.strip() if reference.title else ""
 
         if not title:
-            raise KnowledgeRelationImportError(
-                f"{role}: Titel oder ID ist "
-                "erforderlich."
-            )
+            raise KnowledgeRelationImportError(f"{role}: Titel oder ID ist erforderlich.")
 
         matches = self.matcher.find_matches(
             title=title,
             media_type=reference.media_type,
             year=reference.year,
-            original_title=(
-                reference.original_title
-            ),
-            external_ids=(
-                reference.external_ids
-                or {}
-            ),
+            original_title=(reference.original_title),
+            external_ids=(reference.external_ids or {}),
             limit=10,
         )
 
-        strong_matches = [
-            match
-            for match in matches
-            if match.score >= 0.95
-        ]
+        strong_matches = [match for match in matches if match.score >= 0.95]
 
         if not strong_matches:
             raise KnowledgeRelationImportError(
-                f"{role} konnte nicht eindeutig "
-                f"gefunden werden: {title!r}"
+                f"{role} konnte nicht eindeutig gefunden werden: {title!r}"
             )
 
         if len(strong_matches) > 1:
-            ids = [
-                match.item.id
-                for match in strong_matches
-            ]
+            ids = [match.item.id for match in strong_matches]
 
             raise KnowledgeRelationImportError(
-                f"{role} ist nicht eindeutig: "
-                f"{title!r}, Treffer-IDs: {ids}"
+                f"{role} ist nicht eindeutig: {title!r}, Treffer-IDs: {ids}"
             )
 
         return strong_matches[0].item
@@ -339,28 +272,16 @@ class KnowledgeRelationImporter:
         relation_type: str,
         order_type: str | None,
     ) -> KnowledgeRelation | None:
-        statement = select(
-            KnowledgeRelation
-        ).where(
-            KnowledgeRelation.source_id
-            == source_id,
-            KnowledgeRelation.target_id
-            == target_id,
-            KnowledgeRelation.relation_type
-            == relation_type,
+        statement = select(KnowledgeRelation).where(
+            KnowledgeRelation.source_id == source_id,
+            KnowledgeRelation.target_id == target_id,
+            KnowledgeRelation.relation_type == relation_type,
         )
 
         if order_type is None:
-            statement = statement.where(
-                KnowledgeRelation.order_type.is_(
-                    None
-                )
-            )
+            statement = statement.where(KnowledgeRelation.order_type.is_(None))
         else:
-            statement = statement.where(
-                KnowledgeRelation.order_type
-                == order_type
-            )
+            statement = statement.where(KnowledgeRelation.order_type == order_type)
 
         return self.db.scalar(statement)
 
@@ -377,15 +298,10 @@ class KnowledgeRelationImporter:
             TypeError,
             ValueError,
         ) as error:
-            raise KnowledgeRelationImportError(
-                "Die Position muss eine Zahl sein."
-            ) from error
+            raise KnowledgeRelationImportError("Die Position muss eine Zahl sein.") from error
 
         if position < 0:
-            raise KnowledgeRelationImportError(
-                "Die Position darf nicht negativ "
-                "sein."
-            )
+            raise KnowledgeRelationImportError("Die Position darf nicht negativ sein.")
 
         return position
 
@@ -394,17 +310,9 @@ class KnowledgeRelationImporter:
         current: str | None,
         incoming: str | None,
     ) -> str | None:
-        current_value = (
-            current.strip()
-            if current
-            else ""
-        )
+        current_value = current.strip() if current else ""
 
-        incoming_value = (
-            incoming.strip()
-            if incoming
-            else ""
-        )
+        incoming_value = incoming.strip() if incoming else ""
 
         if not current_value:
             return incoming_value or None
@@ -415,8 +323,4 @@ class KnowledgeRelationImporter:
         if incoming_value in current_value:
             return current_value
 
-        return (
-            current_value
-            + "\n\n"
-            + incoming_value
-        )
+        return current_value + "\n\n" + incoming_value

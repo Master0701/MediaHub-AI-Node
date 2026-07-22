@@ -7,27 +7,17 @@ from typing import Any
 @dataclass
 class AnalyzerContext:
     file_path: Path
-    options: dict[str, Any] = field(
-        default_factory=dict
-    )
-    shared_data: dict[str, Any] = field(
-        default_factory=dict
-    )
+    options: dict[str, Any] = field(default_factory=dict)
+    shared_data: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
 class AnalyzerResult:
     analyzer: str
     success: bool
-    data: dict[str, Any] = field(
-        default_factory=dict
-    )
-    warnings: list[str] = field(
-        default_factory=list
-    )
-    errors: list[str] = field(
-        default_factory=list
-    )
+    data: dict[str, Any] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
+    errors: list[str] = field(default_factory=list)
     skipped: bool = False
     skip_reason: str | None = None
 

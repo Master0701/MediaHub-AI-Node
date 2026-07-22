@@ -48,58 +48,30 @@ class ReferenceCompareService:
         *,
         reference: dict[str, Any],
         candidate_analysis: dict[str, Any],
-        allowed_score_difference: (
-            int | float | None
-        ) = None,
+        allowed_score_difference: (int | float | None) = None,
     ) -> dict[str, Any]:
-        reference_quality = self._dict(
-            reference.get("quality")
-        )
+        reference_quality = self._dict(reference.get("quality"))
 
-        candidate_media = self._dict(
-            candidate_analysis.get("media")
-        )
+        candidate_media = self._dict(candidate_analysis.get("media"))
 
-        candidate_quality = self._dict(
-            candidate_media.get("quality")
-        )
+        candidate_quality = self._dict(candidate_media.get("quality"))
 
         if not candidate_quality:
-            candidate_quality = self._dict(
-                candidate_analysis.get("quality")
-            )
+            candidate_quality = self._dict(candidate_analysis.get("quality"))
 
-        reference_analysis = self._dict(
-            reference.get("analysis")
-        )
+        reference_analysis = self._dict(reference.get("analysis"))
 
-        reference_media = self._dict(
-            reference_analysis.get("media")
-        )
+        reference_media = self._dict(reference_analysis.get("media"))
 
-        reference_fingerprint = self._dict(
-            reference_media.get(
-                "quality_fingerprint"
-            )
-        )
+        reference_fingerprint = self._dict(reference_media.get("quality_fingerprint"))
 
-        candidate_fingerprint = self._dict(
-            candidate_media.get(
-                "quality_fingerprint"
-            )
-        )
+        candidate_fingerprint = self._dict(candidate_media.get("quality_fingerprint"))
 
         if not reference_quality:
-            raise ValueError(
-                "Die Referenz enthält keine "
-                "Qualitätsdaten."
-            )
+            raise ValueError("Die Referenz enthält keine Qualitätsdaten.")
 
         if not candidate_quality:
-            raise ValueError(
-                "Die untersuchte Datei enthält "
-                "keine Qualitätsdaten."
-            )
+            raise ValueError("Die untersuchte Datei enthält keine Qualitätsdaten.")
 
         reference_score = self._score(
             reference_quality.get("score"),
@@ -111,27 +83,17 @@ class ReferenceCompareService:
         )
 
         if reference_score is None:
-            raise ValueError(
-                "Die Referenz enthält keinen "
-                "gültigen Qualitätsscore."
-            )
+            raise ValueError("Die Referenz enthält keinen gültigen Qualitätsscore.")
 
         if candidate_score is None:
-            raise ValueError(
-                "Die untersuchte Datei enthält "
-                "keinen gültigen Qualitätsscore."
-            )
+            raise ValueError("Die untersuchte Datei enthält keinen gültigen Qualitätsscore.")
 
-        allowed_difference = (
-            self._allowed_difference(
-                allowed_score_difference,
-                reference,
-            )
+        allowed_difference = self._allowed_difference(
+            allowed_score_difference,
+            reference,
         )
 
-        score_difference = (
-            candidate_score - reference_score
-        )
+        score_difference = candidate_score - reference_score
 
         verdict = self._verdict(
             score_difference,
@@ -144,41 +106,25 @@ class ReferenceCompareService:
                 candidate_quality=candidate_quality,
             ),
             "video_codec": self._compare_ranked(
-                reference_quality.get(
-                    "video_codec"
-                ),
-                candidate_quality.get(
-                    "video_codec"
-                ),
+                reference_quality.get("video_codec"),
+                candidate_quality.get("video_codec"),
                 self.CODEC_RANKS,
             ),
             "video_bitrate": (
                 self._compare_numeric(
-                    reference_quality.get(
-                        "video_bitrate_bps"
-                    ),
-                    candidate_quality.get(
-                        "video_bitrate_bps"
-                    ),
+                    reference_quality.get("video_bitrate_bps"),
+                    candidate_quality.get("video_bitrate_bps"),
                     tolerance_ratio=0.05,
                 )
             ),
             "frame_rate": self._compare_numeric(
-                reference_quality.get(
-                    "frame_rate"
-                ),
-                candidate_quality.get(
-                    "frame_rate"
-                ),
+                reference_quality.get("frame_rate"),
+                candidate_quality.get("frame_rate"),
                 tolerance_ratio=0.02,
             ),
             "bit_depth": self._compare_numeric(
-                reference_quality.get(
-                    "bit_depth"
-                ),
-                candidate_quality.get(
-                    "bit_depth"
-                ),
+                reference_quality.get("bit_depth"),
+                candidate_quality.get("bit_depth"),
             ),
             "hdr": self._compare_boolean_feature(
                 reference_quality.get("hdr"),
@@ -186,117 +132,64 @@ class ReferenceCompareService:
             ),
             "audio_channels": (
                 self._compare_numeric(
-                    reference_quality.get(
-                        "audio_channels"
-                    ),
-                    candidate_quality.get(
-                        "audio_channels"
-                    ),
+                    reference_quality.get("audio_channels"),
+                    candidate_quality.get("audio_channels"),
                 )
             ),
             "audio_quality": self._compare_ranked(
-                reference_quality.get(
-                    "audio_quality"
-                ),
-                candidate_quality.get(
-                    "audio_quality"
-                ),
+                reference_quality.get("audio_quality"),
+                candidate_quality.get("audio_quality"),
                 self.AUDIO_QUALITY_RANKS,
             ),
             "scan_type": self._compare_scan_type(
-                reference_quality.get(
-                    "scan_type"
-                ),
-                candidate_quality.get(
-                    "scan_type"
-                ),
+                reference_quality.get("scan_type"),
+                candidate_quality.get("scan_type"),
             ),
         }
 
-        visual_comparison = (
-            FingerprintCompareService()
-            .compare(
-                reference_fingerprint=(
-                    reference_fingerprint
-                ),
-                candidate_fingerprint=(
-                    candidate_fingerprint
-                ),
-            )
+        visual_comparison = FingerprintCompareService().compare(
+            reference_fingerprint=(reference_fingerprint),
+            candidate_fingerprint=(candidate_fingerprint),
         )
 
         if visual_comparison.get(
             "available",
             False,
         ):
-            categories["visual_quality"] = (
-                visual_comparison.get(
-                    "verdict",
-                    "unknown",
-                )
+            categories["visual_quality"] = visual_comparison.get(
+                "verdict",
+                "unknown",
             )
 
-        summary = self._category_summary(
-            categories
-        )
+        summary = self._category_summary(categories)
 
         return {
             "verdict": verdict,
             "reference": {
                 "id": reference.get("id"),
-                "reference_uuid": (
-                    reference.get(
-                        "reference_uuid"
-                    )
-                ),
-                "reference_version": (
-                    reference.get(
-                        "reference_version"
-                    )
-                ),
+                "reference_uuid": (reference.get("reference_uuid")),
+                "reference_version": (reference.get("reference_version")),
                 "name": reference.get("name"),
-                "quality_profile": (
-                    reference.get(
-                        "quality_profile"
-                    )
-                ),
+                "quality_profile": (reference.get("quality_profile")),
                 "score": reference_score,
             },
             "candidate": {
-                "file_path": (
-                    candidate_analysis.get(
-                        "file_path"
-                    )
-                ),
-                "pipeline_version": (
-                    candidate_analysis.get(
-                        "pipeline_version"
-                    )
-                ),
-                "quality_profile": (
-                    self._profile_name(
-                        candidate_quality
-                    )
-                ),
+                "file_path": (candidate_analysis.get("file_path")),
+                "pipeline_version": (candidate_analysis.get("pipeline_version")),
+                "quality_profile": (self._profile_name(candidate_quality)),
                 "score": candidate_score,
             },
             "reference_score": reference_score,
             "candidate_score": candidate_score,
             "score_difference": score_difference,
-            "allowed_score_difference": (
-                allowed_difference
-            ),
+            "allowed_score_difference": (allowed_difference),
             "category_comparison": categories,
             "category_summary": summary,
-            "visual_comparison": (
-                visual_comparison
-            ),
+            "visual_comparison": (visual_comparison),
             "recommendation": (
                 self._recommendation(
                     verdict=verdict,
-                    score_difference=(
-                        score_difference
-                    ),
+                    score_difference=(score_difference),
                     categories=summary,
                 )
             ),
@@ -310,11 +203,7 @@ class ReferenceCompareService:
         value = supplied
 
         if value is None:
-            settings = self._dict(
-                reference.get(
-                    "comparison_settings"
-                )
-            )
+            settings = self._dict(reference.get("comparison_settings"))
 
             value = settings.get(
                 "allowed_score_difference",
@@ -322,13 +211,9 @@ class ReferenceCompareService:
             )
 
         try:
-            normalized = int(
-                round(float(value))
-            )
+            normalized = int(round(float(value)))
         except (TypeError, ValueError):
-            normalized = (
-                self.DEFAULT_ALLOWED_SCORE_DIFFERENCE
-            )
+            normalized = self.DEFAULT_ALLOWED_SCORE_DIFFERENCE
 
         return max(
             0,
@@ -358,21 +243,13 @@ class ReferenceCompareService:
         reference_quality: dict[str, Any],
         candidate_quality: dict[str, Any],
     ) -> str:
-        reference_width = cls._number(
-            reference_quality.get("width")
-        )
+        reference_width = cls._number(reference_quality.get("width"))
 
-        reference_height = cls._number(
-            reference_quality.get("height")
-        )
+        reference_height = cls._number(reference_quality.get("height"))
 
-        candidate_width = cls._number(
-            candidate_quality.get("width")
-        )
+        candidate_width = cls._number(candidate_quality.get("width"))
 
-        candidate_height = cls._number(
-            candidate_quality.get("height")
-        )
+        candidate_height = cls._number(candidate_quality.get("height"))
 
         if (
             reference_width is not None
@@ -384,24 +261,13 @@ class ReferenceCompareService:
             and candidate_width > 0
             and candidate_height > 0
         ):
-            reference_pixels = (
-                reference_width
-                * reference_height
-            )
+            reference_pixels = reference_width * reference_height
 
-            candidate_pixels = (
-                candidate_width
-                * candidate_height
-            )
+            candidate_pixels = candidate_width * candidate_height
 
-            tolerance = (
-                reference_pixels * 0.02
-            )
+            tolerance = reference_pixels * 0.02
 
-            difference = (
-                candidate_pixels
-                - reference_pixels
-            )
+            difference = candidate_pixels - reference_pixels
 
             if abs(difference) <= tolerance:
                 return "equal"
@@ -412,12 +278,8 @@ class ReferenceCompareService:
             return "worse"
 
         return cls._compare_ranked(
-            reference_quality.get(
-                "resolution_class"
-            ),
-            candidate_quality.get(
-                "resolution_class"
-            ),
+            reference_quality.get("resolution_class"),
+            candidate_quality.get("resolution_class"),
             cls.RESOLUTION_RANKS,
         )
 
@@ -428,33 +290,19 @@ class ReferenceCompareService:
         *,
         tolerance_ratio: float = 0.0,
     ) -> str:
-        reference_number = (
-            ReferenceCompareService
-            ._number(reference_value)
-        )
+        reference_number = ReferenceCompareService._number(reference_value)
 
-        candidate_number = (
-            ReferenceCompareService
-            ._number(candidate_value)
-        )
+        candidate_number = ReferenceCompareService._number(candidate_value)
 
-        if (
-            reference_number is None
-            or candidate_number is None
-        ):
+        if reference_number is None or candidate_number is None:
             return "unknown"
 
-        tolerance = abs(
-            reference_number
-        ) * max(
+        tolerance = abs(reference_number) * max(
             tolerance_ratio,
             0.0,
         )
 
-        difference = (
-            candidate_number
-            - reference_number
-        )
+        difference = candidate_number - reference_number
 
         if abs(difference) <= tolerance:
             return "equal"
@@ -471,29 +319,18 @@ class ReferenceCompareService:
         candidate_value: Any,
         ranks: dict[str, int],
     ) -> str:
-        reference_key = cls._key(
-            reference_value
-        )
+        reference_key = cls._key(reference_value)
 
-        candidate_key = cls._key(
-            candidate_value
-        )
+        candidate_key = cls._key(candidate_value)
 
         if not reference_key or not candidate_key:
             return "unknown"
 
-        reference_rank = ranks.get(
-            reference_key
-        )
+        reference_rank = ranks.get(reference_key)
 
-        candidate_rank = ranks.get(
-            candidate_key
-        )
+        candidate_rank = ranks.get(candidate_key)
 
-        if (
-            reference_rank is None
-            or candidate_rank is None
-        ):
+        if reference_rank is None or candidate_rank is None:
             if reference_key == candidate_key:
                 return "equal"
 
@@ -513,18 +350,11 @@ class ReferenceCompareService:
         reference_value: Any,
         candidate_value: Any,
     ) -> str:
-        reference_bool = cls._feature_bool(
-            reference_value
-        )
+        reference_bool = cls._feature_bool(reference_value)
 
-        candidate_bool = cls._feature_bool(
-            candidate_value
-        )
+        candidate_bool = cls._feature_bool(candidate_value)
 
-        if (
-            reference_bool is None
-            and candidate_bool is None
-        ):
+        if reference_bool is None and candidate_bool is None:
             return "equal"
 
         if reference_bool == candidate_bool:
@@ -544,13 +374,9 @@ class ReferenceCompareService:
         reference_value: Any,
         candidate_value: Any,
     ) -> str:
-        reference_key = cls._key(
-            reference_value
-        )
+        reference_key = cls._key(reference_value)
 
-        candidate_key = cls._key(
-            candidate_value
-        )
+        candidate_key = cls._key(candidate_value)
 
         if not reference_key or not candidate_key:
             return "unknown"
@@ -569,16 +395,10 @@ class ReferenceCompareService:
             "interlaced_bff",
         }
 
-        if (
-            candidate_key in progressive_values
-            and reference_key in interlaced_values
-        ):
+        if candidate_key in progressive_values and reference_key in interlaced_values:
             return "better"
 
-        if (
-            reference_key in progressive_values
-            and candidate_key in interlaced_values
-        ):
+        if reference_key in progressive_values and candidate_key in interlaced_values:
             return "worse"
 
         return "different"
@@ -587,32 +407,17 @@ class ReferenceCompareService:
     def _category_summary(
         categories: dict[str, str],
     ) -> dict[str, Any]:
-        better = [
-            name
-            for name, result
-            in categories.items()
-            if result == "better"
-        ]
+        better = [name for name, result in categories.items() if result == "better"]
 
-        worse = [
-            name
-            for name, result
-            in categories.items()
-            if result == "worse"
-        ]
+        worse = [name for name, result in categories.items() if result == "worse"]
 
-        equal = [
-            name
-            for name, result
-            in categories.items()
-            if result == "equal"
-        ]
+        equal = [name for name, result in categories.items() if result == "equal"]
 
         unknown = [
             name
-            for name, result
-            in categories.items()
-            if result in {
+            for name, result in categories.items()
+            if result
+            in {
                 "unknown",
                 "different",
             }
@@ -647,17 +452,10 @@ class ReferenceCompareService:
         )
 
         if verdict == "better":
-            text = (
-                "Die geprüfte Datei ist besser "
-                "als die gespeicherte Referenz."
-            )
+            text = "Die geprüfte Datei ist besser als die gespeicherte Referenz."
 
             if better:
-                text += (
-                    " Verbesserungen: "
-                    + ", ".join(better)
-                    + "."
-                )
+                text += " Verbesserungen: " + ", ".join(better) + "."
 
             return text
 
@@ -670,20 +468,12 @@ class ReferenceCompareService:
             )
 
             if worse:
-                text += (
-                    " Schwächere Bereiche: "
-                    + ", ".join(worse)
-                    + "."
-                )
+                text += " Schwächere Bereiche: " + ", ".join(worse) + "."
 
             return text
 
         if score_difference == 0:
-            text = (
-                "Die geprüfte Datei entspricht "
-                "beim Gesamtwert der gespeicherten "
-                "Referenz."
-            )
+            text = "Die geprüfte Datei entspricht beim Gesamtwert der gespeicherten Referenz."
         else:
             text = (
                 "Die geprüfte Datei liegt innerhalb "
@@ -692,10 +482,7 @@ class ReferenceCompareService:
             )
 
         if worse and better:
-            text += (
-                " Einzelne Qualitätsbereiche "
-                "unterscheiden sich jedoch."
-            )
+            text += " Einzelne Qualitätsbereiche unterscheiden sich jedoch."
 
         return text
 
@@ -713,9 +500,7 @@ class ReferenceCompareService:
         if value is None:
             return None
 
-        normalized = str(
-            value
-        ).strip()
+        normalized = str(value).strip()
 
         return normalized or None
 
@@ -724,10 +509,7 @@ class ReferenceCompareService:
         *values: Any,
     ) -> int | None:
         for value in values:
-            number = (
-                ReferenceCompareService
-                ._number(value)
-            )
+            number = ReferenceCompareService._number(value)
 
             if number is None:
                 continue
@@ -773,13 +555,7 @@ class ReferenceCompareService:
         if value is None:
             return ""
 
-        return (
-            str(value)
-            .strip()
-            .lower()
-            .replace("-", "_")
-            .replace(" ", "_")
-        )
+        return str(value).strip().lower().replace("-", "_").replace(" ", "_")
 
     @staticmethod
     def _feature_bool(
@@ -794,9 +570,7 @@ class ReferenceCompareService:
         if isinstance(value, dict):
             return bool(value)
 
-        text = str(
-            value
-        ).strip().lower()
+        text = str(value).strip().lower()
 
         if text in {
             "",

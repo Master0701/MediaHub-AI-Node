@@ -40,10 +40,7 @@ def json_default(value: Any) -> Any:
     if isinstance(value, set):
         return sorted(value)
 
-    raise TypeError(
-        f"Nicht JSON-serialisierbarer Typ: "
-        f"{type(value).__name__}"
-    )
+    raise TypeError(f"Nicht JSON-serialisierbarer Typ: {type(value).__name__}")
 
 
 def json_dumps(value: Any) -> str:
@@ -86,66 +83,28 @@ class ReferenceService:
         quality_profile: str | None = None,
         analysis: dict[str, Any] | None = None,
         quality: dict[str, Any] | None = None,
-        comparison_settings: (
-            dict[str, Any] | None
-        ) = None,
+        comparison_settings: (dict[str, Any] | None) = None,
         enabled: bool = True,
     ) -> dict[str, Any]:
-        normalized_name = self._normalize_name(
-            name
-        )
+        normalized_name = self._normalize_name(name)
 
-        analysis_data = (
-            analysis
-            if isinstance(analysis, dict)
-            else {}
-        )
+        analysis_data = analysis if isinstance(analysis, dict) else {}
 
-        pipeline_version = analysis_data.get(
-            "pipeline_version"
-        )
+        pipeline_version = analysis_data.get("pipeline_version")
 
         profile = ReferenceProfile(
             name=normalized_name,
             reference_version=1,
-            created_with_pipeline=(
-                str(pipeline_version)
-                if pipeline_version is not None
-                else None
-            ),
-            created_with_profile=(
-                self._normalize_optional_text(
-                    quality_profile
-                )
-            ),
-            description=self._normalize_optional_text(
-                description
-            ),
-            source_file_path=(
-                self._normalize_optional_text(
-                    source_file_path
-                )
-            ),
-            source_file_name=(
-                self._normalize_optional_text(
-                    source_file_name
-                )
-            ),
+            created_with_pipeline=(str(pipeline_version) if pipeline_version is not None else None),
+            created_with_profile=(self._normalize_optional_text(quality_profile)),
+            description=self._normalize_optional_text(description),
+            source_file_path=(self._normalize_optional_text(source_file_path)),
+            source_file_name=(self._normalize_optional_text(source_file_name)),
             quality_score=quality_score,
-            quality_profile=(
-                self._normalize_optional_text(
-                    quality_profile
-                )
-            ),
-            analysis_json=json_dumps(
-                analysis_data
-            ),
-            quality_json=json_dumps(
-                quality
-            ),
-            comparison_settings_json=json_dumps(
-                comparison_settings
-            ),
+            quality_profile=(self._normalize_optional_text(quality_profile)),
+            analysis_json=json_dumps(analysis_data),
+            quality_json=json_dumps(quality),
+            comparison_settings_json=json_dumps(comparison_settings),
             enabled=1 if enabled else 0,
         )
 
@@ -156,11 +115,7 @@ class ReferenceService:
         except IntegrityError as exc:
             self.session.rollback()
 
-            raise (
-                ReferenceProfileNameExistsError(
-                    normalized_name
-                )
-            ) from exc
+            raise (ReferenceProfileNameExistsError(normalized_name)) from exc
 
         self.session.refresh(profile)
 
@@ -171,33 +126,20 @@ class ReferenceService:
         *,
         enabled_only: bool = False,
     ) -> list[dict[str, Any]]:
-        statement = select(
-            ReferenceProfile
-        ).order_by(
-            ReferenceProfile.name.asc()
-        )
+        statement = select(ReferenceProfile).order_by(ReferenceProfile.name.asc())
 
         if enabled_only:
-            statement = statement.where(
-                ReferenceProfile.enabled == 1
-            )
+            statement = statement.where(ReferenceProfile.enabled == 1)
 
-        profiles = self.session.scalars(
-            statement
-        ).all()
+        profiles = self.session.scalars(statement).all()
 
-        return [
-            self.to_dict(profile)
-            for profile in profiles
-        ]
+        return [self.to_dict(profile) for profile in profiles]
 
     def get(
         self,
         profile_id: int,
     ) -> dict[str, Any]:
-        profile = self._get_model(
-            profile_id
-        )
+        profile = self._get_model(profile_id)
 
         return self.to_dict(profile)
 
@@ -205,25 +147,14 @@ class ReferenceService:
         self,
         name: str,
     ) -> dict[str, Any]:
-        normalized_name = self._normalize_name(
-            name
-        )
+        normalized_name = self._normalize_name(name)
 
-        statement = select(
-            ReferenceProfile
-        ).where(
-            ReferenceProfile.name
-            == normalized_name
-        )
+        statement = select(ReferenceProfile).where(ReferenceProfile.name == normalized_name)
 
-        profile = self.session.scalar(
-            statement
-        )
+        profile = self.session.scalar(statement)
 
         if profile is None:
-            raise ReferenceProfileNotFoundError(
-                normalized_name
-            )
+            raise ReferenceProfileNotFoundError(normalized_name)
 
         return self.to_dict(profile)
 
@@ -239,74 +170,40 @@ class ReferenceService:
         quality_profile: str | None = None,
         analysis: dict[str, Any] | None = None,
         quality: dict[str, Any] | None = None,
-        comparison_settings: (
-            dict[str, Any] | None
-        ) = None,
+        comparison_settings: (dict[str, Any] | None) = None,
         enabled: bool | None = None,
     ) -> dict[str, Any]:
-        profile = self._get_model(
-            profile_id
-        )
+        profile = self._get_model(profile_id)
 
         if name is not None:
-            profile.name = self._normalize_name(
-                name
-            )
+            profile.name = self._normalize_name(name)
 
         if description is not None:
-            profile.description = (
-                self._normalize_optional_text(
-                    description
-                )
-            )
+            profile.description = self._normalize_optional_text(description)
 
         if source_file_path is not None:
-            profile.source_file_path = (
-                self._normalize_optional_text(
-                    source_file_path
-                )
-            )
+            profile.source_file_path = self._normalize_optional_text(source_file_path)
 
         if source_file_name is not None:
-            profile.source_file_name = (
-                self._normalize_optional_text(
-                    source_file_name
-                )
-            )
+            profile.source_file_name = self._normalize_optional_text(source_file_name)
 
         if quality_score is not None:
-            profile.quality_score = (
-                quality_score
-            )
+            profile.quality_score = quality_score
 
         if quality_profile is not None:
-            profile.quality_profile = (
-                self._normalize_optional_text(
-                    quality_profile
-                )
-            )
+            profile.quality_profile = self._normalize_optional_text(quality_profile)
 
         if analysis is not None:
-            profile.analysis_json = (
-                json_dumps(analysis)
-            )
+            profile.analysis_json = json_dumps(analysis)
 
         if quality is not None:
-            profile.quality_json = (
-                json_dumps(quality)
-            )
+            profile.quality_json = json_dumps(quality)
 
         if comparison_settings is not None:
-            profile.comparison_settings_json = (
-                json_dumps(
-                    comparison_settings
-                )
-            )
+            profile.comparison_settings_json = json_dumps(comparison_settings)
 
         if enabled is not None:
-            profile.enabled = (
-                1 if enabled else 0
-            )
+            profile.enabled = 1 if enabled else 0
 
         profile.reference_version = max(
             int(profile.reference_version or 0) + 1,
@@ -314,32 +211,20 @@ class ReferenceService:
         )
 
         if analysis is not None:
-            pipeline_version = analysis.get(
-                "pipeline_version"
-            )
+            pipeline_version = analysis.get("pipeline_version")
 
             if pipeline_version is not None:
-                profile.created_with_pipeline = str(
-                    pipeline_version
-                )
+                profile.created_with_pipeline = str(pipeline_version)
 
         if quality_profile is not None:
-            profile.created_with_profile = (
-                self._normalize_optional_text(
-                    quality_profile
-                )
-            )
+            profile.created_with_profile = self._normalize_optional_text(quality_profile)
 
         try:
             self.session.commit()
         except IntegrityError as exc:
             self.session.rollback()
 
-            raise (
-                ReferenceProfileNameExistsError(
-                    profile.name
-                )
-            ) from exc
+            raise (ReferenceProfileNameExistsError(profile.name)) from exc
 
         self.session.refresh(profile)
 
@@ -349,9 +234,7 @@ class ReferenceService:
         self,
         profile_id: int,
     ) -> dict[str, Any]:
-        profile = self._get_model(
-            profile_id
-        )
+        profile = self._get_model(profile_id)
 
         result = self.to_dict(profile)
 
@@ -370,9 +253,7 @@ class ReferenceService:
         )
 
         if profile is None:
-            raise ReferenceProfileNotFoundError(
-                profile_id
-            )
+            raise ReferenceProfileNotFoundError(profile_id)
 
         return profile
 
@@ -382,63 +263,26 @@ class ReferenceService:
     ) -> dict[str, Any]:
         return {
             "id": profile.id,
-            "reference_uuid": (
-                profile.reference_uuid
-            ),
-            "reference_version": (
-                profile.reference_version
-            ),
+            "reference_uuid": (profile.reference_uuid),
+            "reference_version": (profile.reference_version),
             "name": profile.name,
-            "description": (
-                profile.description
-            ),
+            "description": (profile.description),
             "source": {
-                "file_path": (
-                    profile.source_file_path
-                ),
-                "file_name": (
-                    profile.source_file_name
-                ),
+                "file_path": (profile.source_file_path),
+                "file_name": (profile.source_file_name),
             },
-            "quality_score": (
-                profile.quality_score
-            ),
-            "quality_profile": (
-                profile.quality_profile
-            ),
+            "quality_score": (profile.quality_score),
+            "quality_profile": (profile.quality_profile),
             "created_with": {
-                "pipeline": (
-                    profile.created_with_pipeline
-                ),
-                "quality_profile": (
-                    profile.created_with_profile
-                ),
+                "pipeline": (profile.created_with_pipeline),
+                "quality_profile": (profile.created_with_profile),
             },
-            "analysis": json_loads(
-                profile.analysis_json
-            ),
-            "quality": json_loads(
-                profile.quality_json
-            ),
-            "comparison_settings": (
-                json_loads(
-                    profile
-                    .comparison_settings_json
-                )
-            ),
-            "enabled": bool(
-                profile.enabled
-            ),
-            "created": (
-                profile.created.isoformat()
-                if profile.created
-                else None
-            ),
-            "updated": (
-                profile.updated.isoformat()
-                if profile.updated
-                else None
-            ),
+            "analysis": json_loads(profile.analysis_json),
+            "quality": json_loads(profile.quality_json),
+            "comparison_settings": (json_loads(profile.comparison_settings_json)),
+            "enabled": bool(profile.enabled),
+            "created": (profile.created.isoformat() if profile.created else None),
+            "updated": (profile.updated.isoformat() if profile.updated else None),
         }
 
     @staticmethod
@@ -448,16 +292,10 @@ class ReferenceService:
         normalized = str(name).strip()
 
         if not normalized:
-            raise ValueError(
-                "Der Profilname darf "
-                "nicht leer sein."
-            )
+            raise ValueError("Der Profilname darf nicht leer sein.")
 
         if len(normalized) > 200:
-            raise ValueError(
-                "Der Profilname darf höchstens "
-                "200 Zeichen lang sein."
-            )
+            raise ValueError("Der Profilname darf höchstens 200 Zeichen lang sein.")
 
         return normalized
 

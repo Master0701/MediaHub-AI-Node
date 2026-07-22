@@ -1,5 +1,5 @@
 import json
-from datetime import date, datetime, time, timezone
+from datetime import UTC, date, datetime, time
 from decimal import Decimal
 from enum import Enum
 from pathlib import Path
@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from app.models import Job
 
-
 VALID_JOB_STATUSES = {
     "queued",
     "running",
@@ -21,7 +20,7 @@ VALID_JOB_STATUSES = {
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def json_default(value: Any) -> Any:
@@ -40,10 +39,7 @@ def json_default(value: Any) -> Any:
     if isinstance(value, (set, frozenset, tuple)):
         return list(value)
 
-    raise TypeError(
-        f"Objekt vom Typ {type(value).__name__} "
-        "ist nicht JSON-serialisierbar."
-    )
+    raise TypeError(f"Objekt vom Typ {type(value).__name__} ist nicht JSON-serialisierbar.")
 
 
 def serialize_json(value: Any) -> str:
@@ -76,9 +72,7 @@ def create_job(
     normalized_job_type = job_type.strip()
 
     if not normalized_job_type:
-        raise ValueError(
-            "Der Job-Typ darf nicht leer sein."
-        )
+        raise ValueError("Der Job-Typ darf nicht leer sein.")
 
     job = Job(
         job_type=normalized_job_type,
@@ -108,11 +102,7 @@ def list_jobs(
     status: str | None = None,
     limit: int = 100,
 ) -> list[Job]:
-    query = (
-        select(Job)
-        .order_by(Job.id.desc())
-        .limit(limit)
-    )
+    query = select(Job).order_by(Job.id.desc()).limit(limit)
 
     if status:
         query = query.where(Job.status == status)
@@ -123,12 +113,7 @@ def list_jobs(
 def get_next_queued_job(
     db: Session,
 ) -> Job | None:
-    query = (
-        select(Job)
-        .where(Job.status == "queued")
-        .order_by(Job.id.asc())
-        .limit(1)
-    )
+    query = select(Job).where(Job.status == "queued").order_by(Job.id.asc()).limit(1)
 
     return db.scalar(query)
 
@@ -214,24 +199,8 @@ def job_to_dict(
             "raw",
         ),
         "error": job.error,
-        "created": (
-            job.created.isoformat()
-            if job.created
-            else None
-        ),
-        "updated": (
-            job.updated.isoformat()
-            if job.updated
-            else None
-        ),
-        "started": (
-            job.started.isoformat()
-            if job.started
-            else None
-        ),
-        "finished": (
-            job.finished.isoformat()
-            if job.finished
-            else None
-        ),
+        "created": (job.created.isoformat() if job.created else None),
+        "updated": (job.updated.isoformat() if job.updated else None),
+        "started": (job.started.isoformat() if job.started else None),
+        "finished": (job.finished.isoformat() if job.finished else None),
     }

@@ -1,32 +1,27 @@
 import logging
 from contextlib import asynccontextmanager
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import psutil
 from fastapi import FastAPI
 
-from app.api.jobs import router as jobs_router
+from app.api.analyzers import router as analyzers_router
 from app.api.cache import router as cache_router
+from app.api.jobs import router as jobs_router
 from app.api.knowledge import router as knowledge_router
+from app.api.knowledge_import import router as knowledge_import_router
 from app.api.providers import router as providers_router
 from app.api.quality import router as quality_router
 from app.api.references import router as references_router
-from app.api.analyzers import router as analyzers_router
 from app.config import APP_NAME, APP_VERSION, BASE_DIR
 from app.database import Base, engine
-from app.references.models import ReferenceProfile
 from app.jobs.worker import start_worker, stop_worker
 from app.services.provider_service import ensure_default_providers
-from app.api.knowledge_import import router as knowledge_import_router
-
 
 logging.basicConfig(
     level=logging.INFO,
-    format=(
-        "%(asctime)s | %(levelname)s | "
-        "%(name)s | %(message)s"
-    ),
+    format=("%(asctime)s | %(levelname)s | %(name)s | %(message)s"),
 )
 
 
@@ -81,9 +76,7 @@ def health() -> dict:
     memory = psutil.virtual_memory()
 
     temperature = None
-    thermal_file = Path(
-        "/sys/class/thermal/thermal_zone0/temp"
-    )
+    thermal_file = Path("/sys/class/thermal/thermal_zone0/temp")
 
     if thermal_file.exists():
         try:
@@ -96,13 +89,9 @@ def health() -> dict:
 
     return {
         "status": "healthy",
-        "timestamp": datetime.now(
-            timezone.utc
-        ).isoformat(),
+        "timestamp": datetime.now(UTC).isoformat(),
         "system": {
-            "cpu_percent": psutil.cpu_percent(
-                interval=0.2
-            ),
+            "cpu_percent": psutil.cpu_percent(interval=0.2),
             "memory_percent": memory.percent,
             "memory_available_gb": round(
                 memory.available / 1024**3,

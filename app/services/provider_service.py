@@ -39,11 +39,7 @@ def ensure_default_providers(
     db: Session,
 ) -> None:
     for provider_name in provider_registry.list_names():
-        existing = db.scalar(
-            select(Provider).where(
-                Provider.name == provider_name
-            )
-        )
+        existing = db.scalar(select(Provider).where(Provider.name == provider_name))
 
         if existing is not None:
             continue
@@ -62,9 +58,7 @@ def ensure_default_providers(
 def list_providers(
     db: Session,
 ) -> list[Provider]:
-    query = select(Provider).order_by(
-        Provider.name.asc()
-    )
+    query = select(Provider).order_by(Provider.name.asc())
 
     return list(db.scalars(query).all())
 
@@ -73,9 +67,7 @@ def get_provider(
     db: Session,
     provider_name: str,
 ) -> Provider | None:
-    query = select(Provider).where(
-        Provider.name == provider_name
-    )
+    query = select(Provider).where(Provider.name == provider_name)
 
     return db.scalar(query)
 
@@ -96,16 +88,12 @@ def set_provider_enabled(
 def provider_to_dict(
     provider: Provider,
 ) -> dict[str, Any]:
-    implementation = provider_registry.get(
-        provider.name
-    )
+    implementation = provider_registry.get(provider.name)
 
     return {
         "id": provider.id,
         "name": provider.name,
         "enabled": bool(provider.enabled),
         "registered": implementation is not None,
-        "config": deserialize_config(
-            provider.config
-        ),
+        "config": deserialize_config(provider.config),
     }

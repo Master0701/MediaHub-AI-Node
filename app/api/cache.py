@@ -21,7 +21,6 @@ from app.cache.service import (
 )
 from app.database import SessionLocal
 
-
 router = APIRouter(
     prefix="/cache",
     tags=["Cache"],
@@ -101,10 +100,7 @@ def read_cache_endpoint(
     if entry is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "Cache-Eintrag nicht gefunden "
-                "oder abgelaufen."
-            ),
+            detail=("Cache-Eintrag nicht gefunden oder abgelaufen."),
         )
 
     return cache_entry_to_dict(entry)
@@ -155,10 +151,7 @@ def list_cache_endpoint(
         limit=limit,
     )
 
-    return [
-        cache_entry_to_dict(entry)
-        for entry in entries
-    ]
+    return [cache_entry_to_dict(entry) for entry in entries]
 
 
 @router.post("/purge-expired")

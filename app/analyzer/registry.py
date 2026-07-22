@@ -15,9 +15,7 @@ class AnalyzerRegistry:
         name = analyzer.name.strip().lower()
 
         if not name:
-            raise ValueError(
-                "Analyzer benötigt einen Namen."
-            )
+            raise ValueError("Analyzer benötigt einen Namen.")
 
         self._analyzers[name] = analyzer
 
@@ -37,9 +35,7 @@ class AnalyzerRegistry:
         self,
         name: str,
     ) -> BaseAnalyzer | None:
-        return self._analyzers.get(
-            name.strip().lower()
-        )
+        return self._analyzers.get(name.strip().lower())
 
     def list_analyzers(
         self,
@@ -53,11 +49,7 @@ class AnalyzerRegistry:
         )
 
     def list_names(self) -> list[str]:
-        return [
-            analyzer.name
-            for analyzer
-            in self.list_analyzers()
-        ]
+        return [analyzer.name for analyzer in self.list_analyzers()]
 
 
 analyzer_registry = AnalyzerRegistry()

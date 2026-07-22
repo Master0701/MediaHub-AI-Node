@@ -78,19 +78,11 @@ class KnowledgeMatcher:
         if not normalized_title:
             return []
 
-        normalized_original_title = normalize_title(
-            original_title
-        )
+        normalized_original_title = normalize_title(original_title)
 
-        normalized_media_type = normalize_media_type(
-            media_type
-        )
+        normalized_media_type = normalize_media_type(media_type)
 
-        normalized_external_ids = (
-            normalize_external_ids(
-                external_ids
-            )
-        )
+        normalized_external_ids = normalize_external_ids(external_ids)
 
         candidates = self._load_candidates(
             title=title,
@@ -106,9 +98,7 @@ class KnowledgeMatcher:
             match = self._compare_item(
                 item=item,
                 normalized_title=normalized_title,
-                normalized_original_title=(
-                    normalized_original_title
-                ),
+                normalized_original_title=(normalized_original_title),
                 media_type=normalized_media_type,
                 year=year,
                 external_ids=normalized_external_ids,
@@ -189,23 +179,13 @@ class KnowledgeMatcher:
     ) -> list[dict[str, Any]]:
         statement = (
             select(KnowledgeItem)
-            .options(
-                selectinload(
-                    KnowledgeItem.aliases
-                )
-            )
-            .order_by(
-                KnowledgeItem.id.asc()
-            )
+            .options(selectinload(KnowledgeItem.aliases))
+            .order_by(KnowledgeItem.id.asc())
         )
 
-        items = list(
-            self.db.scalars(statement).all()
-        )
+        items = list(self.db.scalars(statement).all())
 
-        duplicate_groups: list[
-            dict[str, Any]
-        ] = []
+        duplicate_groups: list[dict[str, Any]] = []
 
         processed_ids: set[int] = set()
 
@@ -218,19 +198,12 @@ class KnowledgeMatcher:
                 media_type=item.media_type,
                 year=item.year,
                 original_title=item.original_title,
-                external_ids=decode_json(
-                    item.external_ids
-                ),
+                external_ids=decode_json(item.external_ids),
                 limit=100,
             )
 
             duplicates = [
-                match
-                for match in matches
-                if (
-                    match.item.id != item.id
-                    and match.score >= 0.95
-                )
+                match for match in matches if (match.item.id != item.id and match.score >= 0.95)
             ]
 
             if not duplicates:
@@ -238,10 +211,7 @@ class KnowledgeMatcher:
 
             group_ids = {
                 item.id,
-                *(
-                    match.item.id
-                    for match in duplicates
-                ),
+                *(match.item.id for match in duplicates),
             }
 
             if group_ids & processed_ids:
@@ -254,13 +224,8 @@ class KnowledgeMatcher:
                     "primary_item_id": item.id,
                     "primary_title": item.title,
                     "primary_year": item.year,
-                    "duplicate_count": len(
-                        duplicates
-                    ),
-                    "duplicates": [
-                        match.to_dict()
-                        for match in duplicates
-                    ],
+                    "duplicate_count": len(duplicates),
+                    "duplicates": [match.to_dict() for match in duplicates],
                 }
             )
 
@@ -275,82 +240,47 @@ class KnowledgeMatcher:
         year: int | None,
         limit: int,
     ) -> list[KnowledgeItem]:
-        statement = select(
-            KnowledgeItem
-        ).options(
-            selectinload(
-                KnowledgeItem.aliases
-            )
-        )
+        statement = select(KnowledgeItem).options(selectinload(KnowledgeItem.aliases))
 
         if media_type:
-            statement = statement.where(
-                KnowledgeItem.media_type
-                == media_type
-            )
+            statement = statement.where(KnowledgeItem.media_type == media_type)
 
         candidate_filters = []
 
         title_value = title.strip()
 
         if title_value:
-            search_value = (
-                f"%{title_value}%"
-            )
+            search_value = f"%{title_value}%"
 
-            alias_item_ids = select(
-                KnowledgeAlias.item_id
-            ).where(
-                KnowledgeAlias.title.ilike(
-                    search_value
-                )
+            alias_item_ids = select(KnowledgeAlias.item_id).where(
+                KnowledgeAlias.title.ilike(search_value)
             )
 
             candidate_filters.extend(
                 [
-                    KnowledgeItem.title.ilike(
-                        search_value
-                    ),
-                    KnowledgeItem.original_title.ilike(
-                        search_value
-                    ),
-                    KnowledgeItem.id.in_(
-                        alias_item_ids
-                    ),
+                    KnowledgeItem.title.ilike(search_value),
+                    KnowledgeItem.original_title.ilike(search_value),
+                    KnowledgeItem.id.in_(alias_item_ids),
                 ]
             )
 
         if original_title:
-            original_search_value = (
-                f"%{original_title.strip()}%"
-            )
+            original_search_value = f"%{original_title.strip()}%"
 
-            original_alias_item_ids = select(
-                KnowledgeAlias.item_id
-            ).where(
-                KnowledgeAlias.title.ilike(
-                    original_search_value
-                )
+            original_alias_item_ids = select(KnowledgeAlias.item_id).where(
+                KnowledgeAlias.title.ilike(original_search_value)
             )
 
             candidate_filters.extend(
                 [
-                    KnowledgeItem.title.ilike(
-                        original_search_value
-                    ),
-                    KnowledgeItem.original_title.ilike(
-                        original_search_value
-                    ),
-                    KnowledgeItem.id.in_(
-                        original_alias_item_ids
-                    ),
+                    KnowledgeItem.title.ilike(original_search_value),
+                    KnowledgeItem.original_title.ilike(original_search_value),
+                    KnowledgeItem.id.in_(original_alias_item_ids),
                 ]
             )
 
         if candidate_filters:
-            statement = statement.where(
-                or_(*candidate_filters)
-            )
+            statement = statement.where(or_(*candidate_filters))
 
         if year is not None:
             statement = statement.where(
@@ -366,55 +296,27 @@ class KnowledgeMatcher:
             KnowledgeItem.id.asc(),
         ).limit(limit)
 
-        candidates = list(
-            self.db.scalars(statement).unique().all()
-        )
+        candidates = list(self.db.scalars(statement).unique().all())
 
         if candidates:
             return candidates
 
-        fallback_statement = select(
-            KnowledgeItem
-        ).options(
-            selectinload(
-                KnowledgeItem.aliases
-            )
-        )
+        fallback_statement = select(KnowledgeItem).options(selectinload(KnowledgeItem.aliases))
 
         if media_type:
-            fallback_statement = (
-                fallback_statement.where(
-                    KnowledgeItem.media_type
-                    == media_type
-                )
-            )
+            fallback_statement = fallback_statement.where(KnowledgeItem.media_type == media_type)
 
         if year is not None:
-            fallback_statement = (
-                fallback_statement.where(
-                    or_(
-                        KnowledgeItem.year
-                        == year,
-                        KnowledgeItem.year.is_(
-                            None
-                        ),
-                    )
+            fallback_statement = fallback_statement.where(
+                or_(
+                    KnowledgeItem.year == year,
+                    KnowledgeItem.year.is_(None),
                 )
             )
 
-        fallback_statement = (
-            fallback_statement
-            .order_by(
-                KnowledgeItem.id.asc()
-            )
-            .limit(limit)
-        )
+        fallback_statement = fallback_statement.order_by(KnowledgeItem.id.asc()).limit(limit)
 
-        return list(
-            self.db.scalars(
-                fallback_statement
-            ).unique().all()
-        )
+        return list(self.db.scalars(fallback_statement).unique().all())
 
     def _compare_item(
         self,
@@ -428,49 +330,23 @@ class KnowledgeMatcher:
     ) -> KnowledgeMatch | None:
         reasons: list[str] = []
 
-        item_media_type = (
-            normalize_media_type(
-                item.media_type
-            )
-        )
+        item_media_type = normalize_media_type(item.media_type)
 
-        if (
-            media_type
-            and item_media_type
-            and media_type != item_media_type
-        ):
+        if media_type and item_media_type and media_type != item_media_type:
             return None
 
-        item_external_ids = (
-            normalize_external_ids(
-                decode_json(
-                    item.external_ids
-                )
-            )
-        )
+        item_external_ids = normalize_external_ids(decode_json(item.external_ids))
 
         matching_external_ids = []
 
         for key, value in external_ids.items():
-            item_value = (
-                item_external_ids.get(key)
-            )
+            item_value = item_external_ids.get(key)
 
-            if (
-                item_value
-                and item_value == value
-            ):
-                matching_external_ids.append(
-                    f"{key}:{value}"
-                )
+            if item_value and item_value == value:
+                matching_external_ids.append(f"{key}:{value}")
 
         if matching_external_ids:
-            reasons.append(
-                "Identische externe ID: "
-                + ", ".join(
-                    matching_external_ids
-                )
-            )
+            reasons.append("Identische externe ID: " + ", ".join(matching_external_ids))
 
             return KnowledgeMatch(
                 item=item,
@@ -479,31 +355,17 @@ class KnowledgeMatcher:
                 reasons=reasons,
             )
 
-        item_titles = self._collect_titles(
-            item
-        )
+        item_titles = self._collect_titles(item)
 
-        exact_title_match = (
-            normalized_title
-            in item_titles
-        )
+        exact_title_match = normalized_title in item_titles
 
         exact_original_title_match = (
-            bool(normalized_original_title)
-            and normalized_original_title
-            in item_titles
+            bool(normalized_original_title) and normalized_original_title in item_titles
         )
 
-        year_equal = (
-            year is not None
-            and item.year is not None
-            and year == item.year
-        )
+        year_equal = year is not None and item.year is not None and year == item.year
 
-        year_unknown = (
-            year is None
-            or item.year is None
-        )
+        year_unknown = year is None or item.year is None
 
         if exact_title_match and year_equal:
             reasons.extend(
@@ -515,10 +377,7 @@ class KnowledgeMatcher:
 
             match_type = (
                 "exact_title_year"
-                if normalize_title(
-                    item.title
-                )
-                == normalized_title
+                if normalize_title(item.title) == normalized_title
                 else "exact_alias_year"
             )
 
@@ -529,10 +388,7 @@ class KnowledgeMatcher:
                 reasons=reasons,
             )
 
-        if (
-            exact_original_title_match
-            and year_equal
-        ):
+        if exact_original_title_match and year_equal:
             reasons.extend(
                 [
                     "Identischer Originaltitel",
@@ -543,19 +399,13 @@ class KnowledgeMatcher:
             return KnowledgeMatch(
                 item=item,
                 score=0.985,
-                match_type=(
-                    "exact_original_title_year"
-                ),
+                match_type=("exact_original_title_year"),
                 reasons=reasons,
             )
 
         if exact_title_match and year_unknown:
-            reasons.append(
-                "Identischer Titel"
-            )
-            reasons.append(
-                "Jahr auf mindestens einer Seite unbekannt"
-            )
+            reasons.append("Identischer Titel")
+            reasons.append("Jahr auf mindestens einer Seite unbekannt")
 
             return KnowledgeMatch(
                 item=item,
@@ -572,9 +422,7 @@ class KnowledgeMatcher:
         }
 
         if normalized_original_title:
-            incoming_titles.add(
-                normalized_original_title
-            )
+            incoming_titles.add(normalized_original_title)
 
         for incoming_title in incoming_titles:
             for item_title in item_titles:
@@ -593,43 +441,26 @@ class KnowledgeMatcher:
 
         score = best_similarity
 
-        reasons.append(
-            "Ähnlicher Titel: "
-            f"{best_similarity:.3f}"
-        )
+        reasons.append(f"Ähnlicher Titel: {best_similarity:.3f}")
 
         if best_item_title:
-            reasons.append(
-                "Verglichen mit: "
-                f"{best_item_title}"
-            )
+            reasons.append(f"Verglichen mit: {best_item_title}")
 
         if year_equal:
             score += 0.08
-            reasons.append(
-                "Identisches Jahr"
-            )
-        elif (
-            year is not None
-            and item.year is not None
-        ):
-            year_difference = abs(
-                year - item.year
-            )
+            reasons.append("Identisches Jahr")
+        elif year is not None and item.year is not None:
+            year_difference = abs(year - item.year)
 
             if year_difference == 1:
                 score -= 0.04
-                reasons.append(
-                    "Jahr weicht um 1 ab"
-                )
+                reasons.append("Jahr weicht um 1 ab")
             else:
                 score -= min(
                     0.25,
                     year_difference * 0.04,
                 )
-                reasons.append(
-                    "Unterschiedliches Jahr"
-                )
+                reasons.append("Unterschiedliches Jahr")
 
         score = max(
             0.0,
@@ -655,29 +486,15 @@ class KnowledgeMatcher:
         }
 
         if item.original_title:
-            titles.add(
-                normalize_title(
-                    item.original_title
-                )
-            )
+            titles.add(normalize_title(item.original_title))
 
         for alias in item.aliases:
-            normalized_alias = (
-                normalize_title(
-                    alias.title
-                )
-            )
+            normalized_alias = normalize_title(alias.title)
 
             if normalized_alias:
-                titles.add(
-                    normalized_alias
-                )
+                titles.add(normalized_alias)
 
-        return {
-            title
-            for title in titles
-            if title
-        }
+        return {title for title in titles if title}
 
 
 def normalize_media_type(
@@ -686,13 +503,7 @@ def normalize_media_type(
     if not value:
         return ""
 
-    normalized = (
-        str(value)
-        .strip()
-        .lower()
-        .replace("-", "_")
-        .replace(" ", "_")
-    )
+    normalized = str(value).strip().lower().replace("-", "_").replace(" ", "_")
 
     aliases = {
         "movie": "movie",
@@ -742,22 +553,14 @@ def normalize_external_ids(
         if raw_value is None:
             continue
 
-        key = (
-            str(raw_key)
-            .strip()
-            .lower()
-            .replace("-", "_")
-            .replace(" ", "_")
-        )
+        key = str(raw_key).strip().lower().replace("-", "_").replace(" ", "_")
 
         canonical_key = key_aliases.get(
             key,
             key,
         )
 
-        value = str(
-            raw_value
-        ).strip().lower()
+        value = str(raw_value).strip().lower()
 
         if not value:
             continue
@@ -779,11 +582,7 @@ def normalize_title(
     )
 
     normalized = "".join(
-        character
-        for character in normalized
-        if not unicodedata.combining(
-            character
-        )
+        character for character in normalized if not unicodedata.combining(character)
     )
 
     normalized = normalized.lower()

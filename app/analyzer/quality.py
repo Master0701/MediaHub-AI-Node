@@ -30,11 +30,7 @@ class QualityAnalyzer(BaseAnalyzer):
         self,
         context: AnalyzerContext,
     ) -> bool:
-        return bool(
-            context.shared_data.get(
-                "video_streams"
-            )
-        )
+        return bool(context.shared_data.get("video_streams"))
 
     def analyze(
         self,
@@ -47,9 +43,7 @@ class QualityAnalyzer(BaseAnalyzer):
             "balanced",
         )
 
-        quality_profile = get_quality_profile(
-            str(requested_profile)
-        )
+        quality_profile = get_quality_profile(str(requested_profile))
 
         video_streams = media.get(
             "video_streams",
@@ -85,142 +79,64 @@ class QualityAnalyzer(BaseAnalyzer):
                 analyzer=self.name,
                 success=False,
                 skipped=True,
-                skip_reason=(
-                    "Keine Video-Daten für die "
-                    "Qualitätsbewertung vorhanden."
-                ),
+                skip_reason=("Keine Video-Daten für die Qualitätsbewertung vorhanden."),
             )
 
         primary_video = video_streams[0]
 
-        width = self._to_int(
-            primary_video.get("width")
-        )
+        width = self._to_int(primary_video.get("width"))
 
-        height = self._to_int(
-            primary_video.get("height")
-        )
+        height = self._to_int(primary_video.get("height"))
 
-        video_codec = str(
-            primary_video.get(
-                "codec_name"
-            )
-            or ""
-        ).lower()
+        video_codec = str(primary_video.get("codec_name") or "").lower()
 
-        pixel_format = str(
-            primary_video.get(
-                "pixel_format"
-            )
-            or ""
-        ).lower()
+        pixel_format = str(primary_video.get("pixel_format") or "").lower()
 
-        frame_rate = self._to_float(
-            primary_video.get(
-                "frame_rate"
-            )
-        )
+        frame_rate = self._to_float(primary_video.get("frame_rate"))
 
-        bitrate = self._to_int(
-            primary_video.get(
-                "bitrate_bps"
-            )
-        )
+        bitrate = self._to_int(primary_video.get("bitrate_bps"))
 
         if bitrate is None:
-            bitrate = self._to_int(
-                media.get(
-                    "bitrate_bps"
-                )
-            )
+            bitrate = self._to_int(media.get("bitrate_bps"))
 
-        hdr = (
-            primary_video.get("hdr")
-            or media.get("hdr")
+        hdr = primary_video.get("hdr") or media.get("hdr")
+
+        resolution_class = self._resolution_class(
+            width,
+            height,
         )
 
-        resolution_class = (
-            self._resolution_class(
-                width,
-                height,
-            )
-        )
+        codec_class = self._video_codec_class(video_codec)
 
-        codec_class = (
-            self._video_codec_class(
-                video_codec
-            )
-        )
+        bit_depth = self._detect_bit_depth(pixel_format)
 
-        bit_depth = self._detect_bit_depth(
-            pixel_format
-        )
-
-        mediainfo_bit_depth = self._to_int(
-            mediainfo_summary.get(
-                "bit_depth"
-            )
-        )
+        mediainfo_bit_depth = self._to_int(mediainfo_summary.get("bit_depth"))
 
         if mediainfo_bit_depth is not None:
             bit_depth = mediainfo_bit_depth
 
-        mediainfo_hdr = (
-            mediainfo_summary.get(
-                "hdr_format"
-            )
-        )
+        mediainfo_hdr = mediainfo_summary.get("hdr_format")
 
         if not hdr and mediainfo_hdr:
             hdr = mediainfo_hdr
 
-        scan_type = (
-            mediainfo_summary.get(
-                "scan_type"
-            )
-        )
+        scan_type = mediainfo_summary.get("scan_type")
 
-        frame_rate_mode = (
-            mediainfo_summary.get(
-                "frame_rate_mode"
-            )
-        )
+        frame_rate_mode = mediainfo_summary.get("frame_rate_mode")
 
-        chroma_subsampling = (
-            mediainfo_summary.get(
-                "chroma_subsampling"
-            )
-        )
+        chroma_subsampling = mediainfo_summary.get("chroma_subsampling")
 
-        video_profile = (
-            mediainfo_summary.get(
-                "video_profile"
-            )
-        )
+        video_profile = mediainfo_summary.get("video_profile")
 
-        audio_channels = self._to_int(
-            mediainfo_summary.get(
-                "audio_channels"
-            )
-        )
+        audio_channels = self._to_int(mediainfo_summary.get("audio_channels"))
 
-        audio_quality = (
-            self._audio_quality(
-                audio_streams
-            )
-        )
+        audio_quality = self._audio_quality(audio_streams)
 
-        score_details: list[
-            dict[str, Any]
-        ] = []
+        score_details: list[dict[str, Any]] = []
 
         score = 0
 
-        resolution_score = (
-            self._resolution_score(
-                height
-            )
-        )
+        resolution_score = self._resolution_score(height)
 
         score += resolution_score
 
@@ -233,11 +149,7 @@ class QualityAnalyzer(BaseAnalyzer):
             }
         )
 
-        codec_score = (
-            self._codec_score(
-                video_codec
-            )
-        )
+        codec_score = self._codec_score(video_codec)
 
         score += codec_score
 
@@ -250,11 +162,9 @@ class QualityAnalyzer(BaseAnalyzer):
             }
         )
 
-        bitrate_score = (
-            self._bitrate_score(
-                bitrate,
-                height,
-            )
+        bitrate_score = self._bitrate_score(
+            bitrate,
+            height,
         )
 
         score += bitrate_score
@@ -268,11 +178,7 @@ class QualityAnalyzer(BaseAnalyzer):
             }
         )
 
-        audio_score = (
-            self._audio_score(
-                audio_streams
-            )
-        )
+        audio_score = self._audio_score(audio_streams)
 
         score += audio_score
 
@@ -285,13 +191,11 @@ class QualityAnalyzer(BaseAnalyzer):
             }
         )
 
-        feature_score = (
-            self._feature_score(
-                hdr=hdr,
-                bit_depth=bit_depth,
-                frame_rate=frame_rate,
-                scan_type=scan_type,
-            )
+        feature_score = self._feature_score(
+            hdr=hdr,
+            bit_depth=bit_depth,
+            frame_rate=frame_rate,
+            scan_type=scan_type,
         )
 
         score += feature_score
@@ -313,23 +217,19 @@ class QualityAnalyzer(BaseAnalyzer):
             min(100, score),
         )
 
-        quality_level = (
-            self._quality_level(
-                score,
-                quality_profile,
-            )
+        quality_level = self._quality_level(
+            score,
+            quality_profile,
         )
 
-        recommendation = (
-            self._recommendation(
-                score=score,
-                height=height,
-                video_codec=video_codec,
-                audio_quality=audio_quality,
-                bitrate=bitrate,
-                audio_channels=audio_channels,
-                quality_profile=quality_profile,
-            )
+        recommendation = self._recommendation(
+            score=score,
+            height=height,
+            video_codec=video_codec,
+            audio_quality=audio_quality,
+            bitrate=bitrate,
+            audio_channels=audio_channels,
+            quality_profile=quality_profile,
         )
 
         warnings = []
@@ -347,66 +247,28 @@ class QualityAnalyzer(BaseAnalyzer):
                 "score": score,
                 "level": quality_level,
                 "profile": {
-                    "name": quality_profile.get(
-                        "name"
-                    ),
-                    "label": quality_profile.get(
-                        "label"
-                    ),
-                    "description": (
-                        quality_profile.get(
-                            "description"
-                        )
-                    ),
+                    "name": quality_profile.get("name"),
+                    "label": quality_profile.get("label"),
+                    "description": (quality_profile.get("description")),
                 },
-                "resolution_class": (
-                    resolution_class
-                ),
+                "resolution_class": (resolution_class),
                 "width": width,
                 "height": height,
-                "video_codec": (
-                    video_codec or None
-                ),
-                "video_codec_class": (
-                    codec_class
-                ),
-                "video_bitrate_bps": (
-                    bitrate
-                ),
-                "frame_rate": (
-                    frame_rate
-                ),
-                "frame_rate_mode": (
-                    frame_rate_mode
-                ),
-                "scan_type": (
-                    scan_type
-                ),
-                "pixel_format": (
-                    pixel_format or None
-                ),
-                "chroma_subsampling": (
-                    chroma_subsampling
-                ),
-                "bit_depth": (
-                    bit_depth
-                ),
+                "video_codec": (video_codec or None),
+                "video_codec_class": (codec_class),
+                "video_bitrate_bps": (bitrate),
+                "frame_rate": (frame_rate),
+                "frame_rate_mode": (frame_rate_mode),
+                "scan_type": (scan_type),
+                "pixel_format": (pixel_format or None),
+                "chroma_subsampling": (chroma_subsampling),
+                "bit_depth": (bit_depth),
                 "hdr": hdr,
-                "video_profile": (
-                    video_profile
-                ),
-                "audio_quality": (
-                    audio_quality
-                ),
-                "audio_channels": (
-                    audio_channels
-                ),
-                "recommendation": (
-                    recommendation
-                ),
-                "score_details": (
-                    score_details
-                ),
+                "video_profile": (video_profile),
+                "audio_quality": (audio_quality),
+                "audio_channels": (audio_channels),
+                "recommendation": (recommendation),
+                "score_details": (score_details),
                 "data_sources": [
                     "ffprobe",
                     "mediainfo",
@@ -495,18 +357,9 @@ class QualityAnalyzer(BaseAnalyzer):
         best_label = "basic"
 
         for stream in streams:
-            codec = str(
-                stream.get(
-                    "codec_name"
-                )
-                or ""
-            ).lower()
+            codec = str(stream.get("codec_name") or "").lower()
 
-            channels = self._to_int(
-                stream.get(
-                    "channels"
-                )
-            ) or 0
+            channels = self._to_int(stream.get("channels")) or 0
 
             if codec in {
                 "truehd",
@@ -541,10 +394,7 @@ class QualityAnalyzer(BaseAnalyzer):
 
             if channels >= 6:
                 rank += 1
-                label = (
-                    label
-                    + "_surround"
-                )
+                label = label + "_surround"
 
             if rank > best_rank:
                 best_rank = rank
@@ -701,18 +551,9 @@ class QualityAnalyzer(BaseAnalyzer):
         best_score = 2
 
         for stream in streams:
-            codec = str(
-                stream.get(
-                    "codec_name"
-                )
-                or ""
-            ).lower()
+            codec = str(stream.get("codec_name") or "").lower()
 
-            channels = self._to_int(
-                stream.get(
-                    "channels"
-                )
-            ) or 0
+            channels = self._to_int(stream.get("channels")) or 0
 
             if codec in {
                 "truehd",
@@ -772,9 +613,7 @@ class QualityAnalyzer(BaseAnalyzer):
             elif frame_rate >= 23:
                 score += 1
 
-        scan_text = str(
-            scan_type or ""
-        ).lower()
+        scan_text = str(scan_type or "").lower()
 
         if scan_text == "progressive":
             score += 1
@@ -803,11 +642,7 @@ class QualityAnalyzer(BaseAnalyzer):
         if "p9" in pixel_format:
             return 9
 
-        if (
-            "yuv" in pixel_format
-            or "rgb" in pixel_format
-            or "gbr" in pixel_format
-        ):
+        if "yuv" in pixel_format or "rgb" in pixel_format or "gbr" in pixel_format:
             return 8
 
         return None
@@ -822,29 +657,19 @@ class QualityAnalyzer(BaseAnalyzer):
             {},
         )
 
-        if score >= int(
-            thresholds.get("excellent", 90)
-        ):
+        if score >= int(thresholds.get("excellent", 90)):
             return "excellent"
 
-        if score >= int(
-            thresholds.get("very_good", 75)
-        ):
+        if score >= int(thresholds.get("very_good", 75)):
             return "very_good"
 
-        if score >= int(
-            thresholds.get("good", 60)
-        ):
+        if score >= int(thresholds.get("good", 60)):
             return "good"
 
-        if score >= int(
-            thresholds.get("acceptable", 45)
-        ):
+        if score >= int(thresholds.get("acceptable", 45)):
             return "acceptable"
 
-        if score >= int(
-            thresholds.get("improvable", 30)
-        ):
+        if score >= int(thresholds.get("improvable", 30)):
             return "improvable"
 
         return "poor"
@@ -869,9 +694,7 @@ class QualityAnalyzer(BaseAnalyzer):
             {},
         )
 
-        minimum_height = int(
-            minimums.get("height", 720)
-        )
+        minimum_height = int(minimums.get("height", 720))
 
         minimum_bitrate = int(
             minimums.get(
@@ -889,90 +712,54 @@ class QualityAnalyzer(BaseAnalyzer):
 
         problems: list[str] = []
 
-        if (
-            height is not None
-            and height < minimum_height
-        ):
-            problems.append(
-                "Auflösung unter dem "
-                "Profil-Mindestwert"
-            )
+        if height is not None and height < minimum_height:
+            problems.append("Auflösung unter dem Profil-Mindestwert")
 
-        if (
-            bitrate is not None
-            and bitrate < minimum_bitrate
-        ):
-            problems.append(
-                "Bitrate unter dem "
-                "Profil-Mindestwert"
-            )
+        if bitrate is not None and bitrate < minimum_bitrate:
+            problems.append("Bitrate unter dem Profil-Mindestwert")
 
-        if (
-            audio_channels is not None
-            and audio_channels
-            < minimum_channels
-        ):
-            problems.append(
-                "zu wenige Audiokanäle"
-            )
+        if audio_channels is not None and audio_channels < minimum_channels:
+            problems.append("zu wenige Audiokanäle")
 
         if video_codec in {
             "mpeg1video",
             "mpeg2video",
             "mpeg4",
         }:
-            problems.append(
-                "veralteter Video-Codec"
-            )
+            problems.append("veralteter Video-Codec")
 
         if audio_quality in {
             "none",
             "basic",
         }:
-            problems.append(
-                "schwache Audioqualität"
-            )
+            problems.append("schwache Audioqualität")
 
-        if level in {
-            "excellent",
-            "very_good",
-        } and not problems:
-            return (
-                "Qualität erfüllt das gewählte "
-                "Profil vollständig."
-            )
+        if (
+            level
+            in {
+                "excellent",
+                "very_good",
+            }
+            and not problems
+        ):
+            return "Qualität erfüllt das gewählte Profil vollständig."
 
         if level == "good" and not problems:
-            return (
-                "Qualität ist gut. Eine bessere "
-                "Fassung ist nicht erforderlich."
-            )
+            return "Qualität ist gut. Eine bessere Fassung ist nicht erforderlich."
 
         if level == "acceptable":
-            prefix = (
-                "Noch akzeptabel, aber eine "
-                "höherwertige Fassung wäre sinnvoll."
-            )
+            prefix = "Noch akzeptabel, aber eine höherwertige Fassung wäre sinnvoll."
 
         elif level == "improvable":
-            prefix = (
-                "Qualität ist verbesserungswürdig."
-            )
+            prefix = "Qualität ist verbesserungswürdig."
 
         else:
-            prefix = (
-                "Bessere Fassung suchen."
-            )
+            prefix = "Bessere Fassung suchen."
 
         if not problems:
             return prefix
 
-        return (
-            prefix
-            + " Gründe: "
-            + ", ".join(problems)
-            + "."
-        )
+        return prefix + " Gründe: " + ", ".join(problems) + "."
 
     def _to_int(
         self,

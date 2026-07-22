@@ -2,10 +2,8 @@ from fastapi import APIRouter, HTTPException
 
 from app.analyzer.quality_profiles import (
     DEFAULT_PROFILE_NAME,
-    get_quality_profile,
     list_quality_profiles,
 )
-
 
 router = APIRouter(
     prefix="/quality",
@@ -30,22 +28,14 @@ def get_profile(
 ) -> dict:
     normalized_name = profile_name.strip().lower()
 
-    profiles = {
-        profile["name"]: profile
-        for profile in list_quality_profiles()
-    }
+    profiles = {profile["name"]: profile for profile in list_quality_profiles()}
 
-    profile = profiles.get(
-        normalized_name
-    )
+    profile = profiles.get(normalized_name)
 
     if profile is None:
         raise HTTPException(
             status_code=404,
-            detail=(
-                "Unbekanntes Qualitätsprofil: "
-                f"{profile_name}"
-            ),
+            detail=(f"Unbekanntes Qualitätsprofil: {profile_name}"),
         )
 
     return profile

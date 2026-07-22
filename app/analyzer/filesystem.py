@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from app.analyzer.base import (
     AnalyzerContext,
@@ -12,7 +12,7 @@ def timestamp_to_iso(
 ) -> str:
     return datetime.fromtimestamp(
         value,
-        tz=timezone.utc,
+        tz=UTC,
     ).isoformat()
 
 
@@ -43,14 +43,9 @@ class FilesystemAnalyzer(BaseAnalyzer):
                     "exists": False,
                     "is_file": False,
                     "is_directory": False,
-                    "absolute_path": str(
-                        file_path.absolute()
-                    ),
+                    "absolute_path": str(file_path.absolute()),
                 },
-                warnings=[
-                    "Die Mediendatei existiert "
-                    "auf diesem KI-Knoten nicht."
-                ],
+                warnings=["Die Mediendatei existiert auf diesem KI-Knoten nicht."],
             )
 
         stat = file_path.stat()
@@ -58,30 +53,14 @@ class FilesystemAnalyzer(BaseAnalyzer):
         data = {
             "exists": True,
             "is_file": file_path.is_file(),
-            "is_directory": (
-                file_path.is_dir()
-            ),
-            "absolute_path": str(
-                file_path.resolve()
-            ),
-            "parent_directory": str(
-                file_path.parent.resolve()
-            ),
-            "file_size_bytes": (
-                stat.st_size
-            ),
-            "created_utc": timestamp_to_iso(
-                stat.st_ctime
-            ),
-            "modified_utc": timestamp_to_iso(
-                stat.st_mtime
-            ),
-            "accessed_utc": timestamp_to_iso(
-                stat.st_atime
-            ),
-            "permissions_octal": oct(
-                stat.st_mode & 0o777
-            ),
+            "is_directory": (file_path.is_dir()),
+            "absolute_path": str(file_path.resolve()),
+            "parent_directory": str(file_path.parent.resolve()),
+            "file_size_bytes": (stat.st_size),
+            "created_utc": timestamp_to_iso(stat.st_ctime),
+            "modified_utc": timestamp_to_iso(stat.st_mtime),
+            "accessed_utc": timestamp_to_iso(stat.st_atime),
+            "permissions_octal": oct(stat.st_mode & 0o777),
         }
 
         return AnalyzerResult(

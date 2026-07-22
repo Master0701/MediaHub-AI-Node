@@ -49,11 +49,7 @@ def create_item(
     item = KnowledgeItem(
         media_type=media_type.strip().lower(),
         title=title.strip(),
-        original_title=(
-            original_title.strip()
-            if original_title
-            else None
-        ),
+        original_title=(original_title.strip() if original_title else None),
         year=year,
         external_ids=encode_json(external_ids),
         metadata_json=encode_json(metadata),
@@ -82,26 +78,19 @@ def search_items(
     statement = select(KnowledgeItem)
 
     if media_type:
-        statement = statement.where(
-            KnowledgeItem.media_type
-            == media_type.strip().lower()
-        )
+        statement = statement.where(KnowledgeItem.media_type == media_type.strip().lower())
 
     if query:
         search_value = f"%{query.strip()}%"
 
-        alias_item_ids = select(
-            KnowledgeAlias.item_id
-        ).where(
+        alias_item_ids = select(KnowledgeAlias.item_id).where(
             KnowledgeAlias.title.ilike(search_value)
         )
 
         statement = statement.where(
             or_(
                 KnowledgeItem.title.ilike(search_value),
-                KnowledgeItem.original_title.ilike(
-                    search_value
-                ),
+                KnowledgeItem.original_title.ilike(search_value),
                 KnowledgeItem.id.in_(alias_item_ids),
             )
         )
@@ -124,11 +113,7 @@ def add_alias(
     alias = KnowledgeAlias(
         item_id=item.id,
         title=title.strip(),
-        language=(
-            language.strip().lower()
-            if language
-            else None
-        ),
+        language=(language.strip().lower() if language else None),
         alias_type=alias_type.strip().lower(),
     )
 
@@ -151,16 +136,8 @@ def create_relation(
     relation = KnowledgeRelation(
         source_id=source_id,
         target_id=target_id,
-        relation_type=normalize_relation_type(
-            relation_type
-        ),
-        order_type=(
-            normalize_relation_type(
-                order_type
-            )
-            if order_type
-            else None
-        ),
+        relation_type=normalize_relation_type(relation_type),
+        order_type=(normalize_relation_type(order_type) if order_type else None),
         position=position,
         notes=notes.strip() if notes else None,
     )
@@ -202,12 +179,8 @@ def item_to_dict(
         "title": item.title,
         "original_title": item.original_title,
         "year": item.year,
-        "external_ids": decode_json(
-            item.external_ids
-        ),
-        "metadata": decode_json(
-            item.metadata_json
-        ),
+        "external_ids": decode_json(item.external_ids),
+        "metadata": decode_json(item.metadata_json),
         "aliases": [
             {
                 "id": alias.id,

@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Any
 
 from app.providers.base import BaseProvider
@@ -13,9 +13,7 @@ class LocalProvider(BaseProvider):
             "provider": self.provider_name,
             "type": self.provider_type,
             "status": "healthy",
-            "timestamp": datetime.now(
-                timezone.utc
-            ).isoformat(),
+            "timestamp": datetime.now(UTC).isoformat(),
         }
 
     def execute(
@@ -28,8 +26,5 @@ class LocalProvider(BaseProvider):
             "task": task,
             "status": "completed",
             "payload": payload,
-            "message": (
-                "Aufgabe wurde vom lokalen "
-                "MediaHub-Provider verarbeitet."
-            ),
+            "message": ("Aufgabe wurde vom lokalen MediaHub-Provider verarbeitet."),
         }

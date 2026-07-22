@@ -35,10 +35,7 @@ class FFProbeAnalyzer(BaseAnalyzer):
         self,
         context: AnalyzerContext,
     ) -> bool:
-        return (
-            context.file_path.exists()
-            and context.file_path.is_file()
-        )
+        return context.file_path.exists() and context.file_path.is_file()
 
     def analyze(
         self,
@@ -68,17 +65,11 @@ class FFProbeAnalyzer(BaseAnalyzer):
             return AnalyzerResult(
                 analyzer=self.name,
                 success=False,
-                errors=[
-                    "FFprobe wurde nach 60 Sekunden "
-                    "abgebrochen."
-                ],
+                errors=["FFprobe wurde nach 60 Sekunden abgebrochen."],
             )
 
         if process.returncode != 0:
-            error_message = (
-                process.stderr.strip()
-                or "FFprobe konnte die Datei nicht analysieren."
-            )
+            error_message = process.stderr.strip() or "FFprobe konnte die Datei nicht analysieren."
 
             return AnalyzerResult(
                 analyzer=self.name,
@@ -89,21 +80,15 @@ class FFProbeAnalyzer(BaseAnalyzer):
             )
 
         try:
-            probe_data = json.loads(
-                process.stdout
-            )
+            probe_data = json.loads(process.stdout)
         except json.JSONDecodeError as exc:
             return AnalyzerResult(
                 analyzer=self.name,
                 success=False,
-                errors=[
-                    f"Ungültige FFprobe-Ausgabe: {exc}"
-                ],
+                errors=[f"Ungültige FFprobe-Ausgabe: {exc}"],
             )
 
-        data = self._build_result(
-            probe_data
-        )
+        data = self._build_result(probe_data)
 
         return AnalyzerResult(
             analyzer=self.name,
@@ -136,152 +121,55 @@ class FFProbeAnalyzer(BaseAnalyzer):
         other_streams = []
 
         for stream in streams:
-            codec_type = stream.get(
-                "codec_type"
-            )
+            codec_type = stream.get("codec_type")
 
             if codec_type == "video":
-                video_streams.append(
-                    self._parse_video_stream(
-                        stream
-                    )
-                )
+                video_streams.append(self._parse_video_stream(stream))
             elif codec_type == "audio":
-                audio_streams.append(
-                    self._parse_audio_stream(
-                        stream
-                    )
-                )
+                audio_streams.append(self._parse_audio_stream(stream))
             elif codec_type == "subtitle":
-                subtitle_streams.append(
-                    self._parse_subtitle_stream(
-                        stream
-                    )
-                )
+                subtitle_streams.append(self._parse_subtitle_stream(stream))
             else:
-                other_streams.append(
-                    self._parse_generic_stream(
-                        stream
-                    )
-                )
+                other_streams.append(self._parse_generic_stream(stream))
 
-        primary_video = (
-            video_streams[0]
-            if video_streams
-            else None
-        )
+        primary_video = video_streams[0] if video_streams else None
 
         return {
             "container": {
-                "format_name": format_data.get(
-                    "format_name"
-                ),
-                "format_long_name": format_data.get(
-                    "format_long_name"
-                ),
-                "duration_seconds": (
-                    self._to_float(
-                        format_data.get(
-                            "duration"
-                        )
-                    )
-                ),
-                "size_bytes": (
-                    self._to_int(
-                        format_data.get(
-                            "size"
-                        )
-                    )
-                ),
-                "bitrate_bps": (
-                    self._to_int(
-                        format_data.get(
-                            "bit_rate"
-                        )
-                    )
-                ),
-                "probe_score": (
-                    self._to_int(
-                        format_data.get(
-                            "probe_score"
-                        )
-                    )
-                ),
+                "format_name": format_data.get("format_name"),
+                "format_long_name": format_data.get("format_long_name"),
+                "duration_seconds": (self._to_float(format_data.get("duration"))),
+                "size_bytes": (self._to_int(format_data.get("size"))),
+                "bitrate_bps": (self._to_int(format_data.get("bit_rate"))),
+                "probe_score": (self._to_int(format_data.get("probe_score"))),
                 "tags": format_data.get(
                     "tags",
                     {},
                 ),
             },
-            "duration_seconds": (
-                self._to_float(
-                    format_data.get(
-                        "duration"
-                    )
-                )
-            ),
-            "bitrate_bps": (
-                self._to_int(
-                    format_data.get(
-                        "bit_rate"
-                    )
-                )
-            ),
+            "duration_seconds": (self._to_float(format_data.get("duration"))),
+            "bitrate_bps": (self._to_int(format_data.get("bit_rate"))),
             "resolution": (
                 {
-                    "width": primary_video.get(
-                        "width"
-                    ),
-                    "height": primary_video.get(
-                        "height"
-                    ),
+                    "width": primary_video.get("width"),
+                    "height": primary_video.get("height"),
                 }
                 if primary_video
                 else None
             ),
-            "video_codec": (
-                primary_video.get(
-                    "codec_name"
-                )
-                if primary_video
-                else None
-            ),
-            "frame_rate": (
-                primary_video.get(
-                    "frame_rate"
-                )
-                if primary_video
-                else None
-            ),
-            "hdr": (
-                primary_video.get(
-                    "hdr"
-                )
-                if primary_video
-                else None
-            ),
+            "video_codec": (primary_video.get("codec_name") if primary_video else None),
+            "frame_rate": (primary_video.get("frame_rate") if primary_video else None),
+            "hdr": (primary_video.get("hdr") if primary_video else None),
             "video_streams": video_streams,
             "audio_streams": audio_streams,
-            "subtitle_streams": (
-                subtitle_streams
-            ),
+            "subtitle_streams": (subtitle_streams),
             "other_streams": other_streams,
             "stream_count": len(streams),
-            "video_stream_count": len(
-                video_streams
-            ),
-            "audio_stream_count": len(
-                audio_streams
-            ),
-            "subtitle_stream_count": len(
-                subtitle_streams
-            ),
+            "video_stream_count": len(video_streams),
+            "audio_stream_count": len(audio_streams),
+            "subtitle_stream_count": len(subtitle_streams),
             "chapter_count": len(chapters),
-            "chapters": [
-                self._parse_chapter(
-                    chapter
-                )
-                for chapter in chapters
-            ],
+            "chapters": [self._parse_chapter(chapter) for chapter in chapters],
         }
 
     def _parse_video_stream(
@@ -289,95 +177,40 @@ class FFProbeAnalyzer(BaseAnalyzer):
         stream: dict[str, Any],
     ) -> dict[str, Any]:
         frame_rate = self._parse_fraction(
-            stream.get(
-                "avg_frame_rate"
-            )
-            or stream.get(
-                "r_frame_rate"
-            )
+            stream.get("avg_frame_rate") or stream.get("r_frame_rate")
         )
 
-        color_transfer = stream.get(
-            "color_transfer"
-        )
+        color_transfer = stream.get("color_transfer")
 
-        color_primaries = stream.get(
-            "color_primaries"
-        )
+        color_primaries = stream.get("color_primaries")
 
-        color_space = stream.get(
-            "color_space"
-        )
+        color_space = stream.get("color_space")
 
-        hdr_type = self._detect_hdr(
-            stream
-        )
+        hdr_type = self._detect_hdr(stream)
 
         return {
-            "index": stream.get(
-                "index"
-            ),
-            "codec_name": stream.get(
-                "codec_name"
-            ),
-            "codec_long_name": stream.get(
-                "codec_long_name"
-            ),
-            "profile": stream.get(
-                "profile"
-            ),
-            "width": stream.get(
-                "width"
-            ),
-            "height": stream.get(
-                "height"
-            ),
-            "coded_width": stream.get(
-                "coded_width"
-            ),
-            "coded_height": stream.get(
-                "coded_height"
-            ),
-            "pixel_format": stream.get(
-                "pix_fmt"
-            ),
-            "level": stream.get(
-                "level"
-            ),
+            "index": stream.get("index"),
+            "codec_name": stream.get("codec_name"),
+            "codec_long_name": stream.get("codec_long_name"),
+            "profile": stream.get("profile"),
+            "width": stream.get("width"),
+            "height": stream.get("height"),
+            "coded_width": stream.get("coded_width"),
+            "coded_height": stream.get("coded_height"),
+            "pixel_format": stream.get("pix_fmt"),
+            "level": stream.get("level"),
             "frame_rate": frame_rate,
-            "bitrate_bps": self._to_int(
-                stream.get(
-                    "bit_rate"
-                )
-            ),
-            "duration_seconds": self._to_float(
-                stream.get(
-                    "duration"
-                )
-            ),
-            "color_range": stream.get(
-                "color_range"
-            ),
+            "bitrate_bps": self._to_int(stream.get("bit_rate")),
+            "duration_seconds": self._to_float(stream.get("duration")),
+            "color_range": stream.get("color_range"),
             "color_space": color_space,
-            "color_transfer": (
-                color_transfer
-            ),
-            "color_primaries": (
-                color_primaries
-            ),
+            "color_transfer": (color_transfer),
+            "color_primaries": (color_primaries),
             "hdr": hdr_type,
-            "language": self._get_language(
-                stream
-            ),
-            "title": self._get_title(
-                stream
-            ),
-            "default": self._is_default(
-                stream
-            ),
-            "forced": self._is_forced(
-                stream
-            ),
+            "language": self._get_language(stream),
+            "title": self._get_title(stream),
+            "default": self._is_default(stream),
+            "forced": self._is_forced(stream),
             "tags": stream.get(
                 "tags",
                 {},
@@ -389,51 +222,19 @@ class FFProbeAnalyzer(BaseAnalyzer):
         stream: dict[str, Any],
     ) -> dict[str, Any]:
         return {
-            "index": stream.get(
-                "index"
-            ),
-            "codec_name": stream.get(
-                "codec_name"
-            ),
-            "codec_long_name": stream.get(
-                "codec_long_name"
-            ),
-            "profile": stream.get(
-                "profile"
-            ),
-            "sample_rate": self._to_int(
-                stream.get(
-                    "sample_rate"
-                )
-            ),
-            "channels": stream.get(
-                "channels"
-            ),
-            "channel_layout": stream.get(
-                "channel_layout"
-            ),
-            "bitrate_bps": self._to_int(
-                stream.get(
-                    "bit_rate"
-                )
-            ),
-            "duration_seconds": self._to_float(
-                stream.get(
-                    "duration"
-                )
-            ),
-            "language": self._get_language(
-                stream
-            ),
-            "title": self._get_title(
-                stream
-            ),
-            "default": self._is_default(
-                stream
-            ),
-            "forced": self._is_forced(
-                stream
-            ),
+            "index": stream.get("index"),
+            "codec_name": stream.get("codec_name"),
+            "codec_long_name": stream.get("codec_long_name"),
+            "profile": stream.get("profile"),
+            "sample_rate": self._to_int(stream.get("sample_rate")),
+            "channels": stream.get("channels"),
+            "channel_layout": stream.get("channel_layout"),
+            "bitrate_bps": self._to_int(stream.get("bit_rate")),
+            "duration_seconds": self._to_float(stream.get("duration")),
+            "language": self._get_language(stream),
+            "title": self._get_title(stream),
+            "default": self._is_default(stream),
+            "forced": self._is_forced(stream),
             "tags": stream.get(
                 "tags",
                 {},
@@ -445,32 +246,14 @@ class FFProbeAnalyzer(BaseAnalyzer):
         stream: dict[str, Any],
     ) -> dict[str, Any]:
         return {
-            "index": stream.get(
-                "index"
-            ),
-            "codec_name": stream.get(
-                "codec_name"
-            ),
-            "codec_long_name": stream.get(
-                "codec_long_name"
-            ),
-            "language": self._get_language(
-                stream
-            ),
-            "title": self._get_title(
-                stream
-            ),
-            "default": self._is_default(
-                stream
-            ),
-            "forced": self._is_forced(
-                stream
-            ),
-            "hearing_impaired": (
-                self._is_hearing_impaired(
-                    stream
-                )
-            ),
+            "index": stream.get("index"),
+            "codec_name": stream.get("codec_name"),
+            "codec_long_name": stream.get("codec_long_name"),
+            "language": self._get_language(stream),
+            "title": self._get_title(stream),
+            "default": self._is_default(stream),
+            "forced": self._is_forced(stream),
+            "hearing_impaired": (self._is_hearing_impaired(stream)),
             "tags": stream.get(
                 "tags",
                 {},
@@ -482,21 +265,11 @@ class FFProbeAnalyzer(BaseAnalyzer):
         stream: dict[str, Any],
     ) -> dict[str, Any]:
         return {
-            "index": stream.get(
-                "index"
-            ),
-            "codec_type": stream.get(
-                "codec_type"
-            ),
-            "codec_name": stream.get(
-                "codec_name"
-            ),
-            "language": self._get_language(
-                stream
-            ),
-            "title": self._get_title(
-                stream
-            ),
+            "index": stream.get("index"),
+            "codec_type": stream.get("codec_type"),
+            "codec_name": stream.get("codec_name"),
+            "language": self._get_language(stream),
+            "title": self._get_title(stream),
             "tags": stream.get(
                 "tags",
                 {},
@@ -513,22 +286,10 @@ class FFProbeAnalyzer(BaseAnalyzer):
         )
 
         return {
-            "id": chapter.get(
-                "id"
-            ),
-            "start_seconds": self._to_float(
-                chapter.get(
-                    "start_time"
-                )
-            ),
-            "end_seconds": self._to_float(
-                chapter.get(
-                    "end_time"
-                )
-            ),
-            "title": tags.get(
-                "title"
-            ),
+            "id": chapter.get("id"),
+            "start_seconds": self._to_float(chapter.get("start_time")),
+            "end_seconds": self._to_float(chapter.get("end_time")),
+            "title": tags.get("title"),
             "tags": tags,
         }
 
@@ -536,12 +297,7 @@ class FFProbeAnalyzer(BaseAnalyzer):
         self,
         stream: dict[str, Any],
     ) -> str | None:
-        transfer = str(
-            stream.get(
-                "color_transfer",
-                ""
-            )
-        ).lower()
+        transfer = str(stream.get("color_transfer", "")).lower()
 
         side_data = stream.get(
             "side_data_list",
@@ -553,18 +309,13 @@ class FFProbeAnalyzer(BaseAnalyzer):
             ensure_ascii=False,
         ).lower()
 
-        if (
-            "dovi" in side_data_text
-            or "dolby vision" in side_data_text
-        ):
+        if "dovi" in side_data_text or "dolby vision" in side_data_text:
             return "dolby_vision"
 
         if transfer == "smpte2084":
             if (
-                "content light level"
-                in side_data_text
-                or "mastering display metadata"
-                in side_data_text
+                "content light level" in side_data_text
+                or "mastering display metadata" in side_data_text
             ):
                 return "hdr10"
 
@@ -582,9 +333,7 @@ class FFProbeAnalyzer(BaseAnalyzer):
         return stream.get(
             "tags",
             {},
-        ).get(
-            "language"
-        )
+        ).get("language")
 
     def _get_title(
         self,
@@ -593,9 +342,7 @@ class FFProbeAnalyzer(BaseAnalyzer):
         return stream.get(
             "tags",
             {},
-        ).get(
-            "title"
-        )
+        ).get("title")
 
     def _is_default(
         self,
@@ -649,9 +396,7 @@ class FFProbeAnalyzer(BaseAnalyzer):
             return None
 
         try:
-            fraction = Fraction(
-                str(value)
-            )
+            fraction = Fraction(str(value))
 
             if fraction.denominator == 0:
                 return None

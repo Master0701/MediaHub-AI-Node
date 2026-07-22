@@ -4,7 +4,6 @@ import pytest
 
 from app.references.compare import ReferenceCompareService
 
-
 REFERENCE_QUALITY = {
     "score": 52,
     "width": 1280,
@@ -65,9 +64,7 @@ def make_candidate(
     )
 
     if width <= 640 or height <= 360:
-        quality["resolution_class"] = (
-            "Low Resolution"
-        )
+        quality["resolution_class"] = "Low Resolution"
 
     return {
         "file_path": "/tmp/test-video.mkv",
@@ -110,8 +107,7 @@ def install_visual_result(
         return dict(result)
 
     monkeypatch.setattr(
-        "app.references.compare."
-        "FingerprintCompareService.compare",
+        "app.references.compare.FingerprintCompareService.compare",
         fake_compare,
     )
 
@@ -155,12 +151,7 @@ def test_identical_reference_is_similar(
 
     assert summary["worse"] == []
     assert result["visual_comparison"]["version"] == "2"
-    assert (
-        result["visual_comparison"][
-            "similarity_percent"
-        ]
-        == 100.0
-    )
+    assert result["visual_comparison"]["similarity_percent"] == 100.0
 
 
 def test_low_quality_video_is_worse(
@@ -203,9 +194,7 @@ def test_low_quality_video_is_worse(
         "video_bitrate",
     ]
 
-    assert result["visual_comparison"][
-        "quality_events"
-    ] == []
+    assert result["visual_comparison"]["quality_events"] == []
 
 
 def test_damaged_blurred_video_is_worse(
@@ -259,10 +248,7 @@ def test_damaged_blurred_video_is_worse(
 
     assert visual["version"] == "2"
     assert visual["verdict"] == "worse"
-    assert (
-        visual["visual_difference_percent"]
-        == -33.33
-    )
+    assert visual["visual_difference_percent"] == -33.33
     assert visual["similarity_percent"] == 47.67
     assert visual["quality_events"] == quality_events
 
@@ -279,9 +265,7 @@ def test_resolution_uses_pixel_count() -> None:
         candidate_quality={
             "width": 640,
             "height": 360,
-            "resolution_class": (
-                "Low Resolution"
-            ),
+            "resolution_class": ("Low Resolution"),
         },
     )
 
@@ -296,9 +280,7 @@ def test_resolution_fallback_handles_low_resolution() -> None:
             "resolution_class": "HD",
         },
         candidate_quality={
-            "resolution_class": (
-                "Low Resolution"
-            ),
+            "resolution_class": ("Low Resolution"),
         },
     )
 

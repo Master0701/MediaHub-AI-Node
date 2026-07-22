@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import Any, Generator
+from collections.abc import Generator
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
@@ -8,8 +9,8 @@ from sqlalchemy.orm import Session
 
 from app.database import SessionLocal
 from app.knowledge.importer import (
-    KnowledgeImportError,
     KnowledgeImporter,
+    KnowledgeImportError,
     KnowledgeImportRequest,
 )
 from app.knowledge.merge import (
@@ -22,7 +23,6 @@ from app.knowledge.relation_importer import (
     KnowledgeRelationImportError,
     KnowledgeRelationRequest,
 )
-
 
 router = APIRouter(
     prefix="/knowledge/import",
@@ -50,15 +50,9 @@ class ItemImportInput(BaseModel):
     media_type: str = Field(min_length=1)
     year: int | None = None
     original_title: str | None = None
-    aliases: list[AliasInput | str] = Field(
-        default_factory=list
-    )
-    external_ids: dict[str, Any] = Field(
-        default_factory=dict
-    )
-    metadata: dict[str, Any] = Field(
-        default_factory=dict
-    )
+    aliases: list[AliasInput | str] = Field(default_factory=list)
+    external_ids: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
     source: str | None = None
     dry_run: bool = False
     overwrite_existing: bool = False
@@ -70,9 +64,7 @@ class ItemReferenceInput(BaseModel):
     media_type: str | None = None
     year: int | None = None
     original_title: str | None = None
-    external_ids: dict[str, Any] = Field(
-        default_factory=dict
-    )
+    external_ids: dict[str, Any] = Field(default_factory=dict)
 
 
 class RelationImportInput(BaseModel):
@@ -103,9 +95,7 @@ def import_item(
             if isinstance(alias, str):
                 aliases.append(alias)
             else:
-                aliases.append(
-                    alias.model_dump()
-                )
+                aliases.append(alias.model_dump())
 
         importer = KnowledgeImporter(db)
 
@@ -121,9 +111,7 @@ def import_item(
                 source=payload.source,
             ),
             dry_run=payload.dry_run,
-            overwrite_existing=(
-                payload.overwrite_existing
-            ),
+            overwrite_existing=(payload.overwrite_existing),
         )
 
         return result.to_dict()
@@ -145,15 +133,9 @@ def import_relation(
 
         result = importer.import_relation(
             KnowledgeRelationRequest(
-                source=_to_reference(
-                    payload.source
-                ),
-                target=_to_reference(
-                    payload.target
-                ),
-                relation_type=(
-                    payload.relation_type
-                ),
+                source=_to_reference(payload.source),
+                target=_to_reference(payload.target),
+                relation_type=(payload.relation_type),
                 order_type=payload.order_type,
                 position=payload.position,
                 notes=payload.notes,

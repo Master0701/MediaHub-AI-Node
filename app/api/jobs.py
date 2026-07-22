@@ -14,7 +14,6 @@ from app.services.job_service import (
     list_jobs,
 )
 
-
 router = APIRouter(
     prefix="/jobs",
     tags=["Jobs"],
@@ -96,11 +95,7 @@ def list_job_types_endpoint() -> dict:
         job_handler_registry,
     )
 
-    return {
-        "job_types": (
-            job_handler_registry.list_types()
-        )
-    }
+    return {"job_types": (job_handler_registry.list_types())}
 
 
 @router.get("/{job_id}")

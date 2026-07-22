@@ -10,9 +10,7 @@ class ProviderRegistry:
         self,
         provider: BaseProvider,
     ) -> None:
-        self._providers[
-            provider.provider_name
-        ] = provider
+        self._providers[provider.provider_name] = provider
 
     def get(
         self,
@@ -27,10 +25,7 @@ class ProviderRegistry:
         provider = self.get(provider_name)
 
         if provider is None:
-            raise ValueError(
-                f"Provider nicht gefunden: "
-                f"{provider_name}"
-            )
+            raise ValueError(f"Provider nicht gefunden: {provider_name}")
 
         return provider
 

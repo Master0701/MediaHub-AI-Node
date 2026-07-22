@@ -66,16 +66,10 @@ class FingerprintCompareService:
         candidate_fingerprint: dict[str, Any],
     ) -> dict[str, Any]:
         if not reference_fingerprint:
-            return self._unavailable(
-                "Die Referenz enthält keinen "
-                "Quality-Fingerprint."
-            )
+            return self._unavailable("Die Referenz enthält keinen Quality-Fingerprint.")
 
         if not candidate_fingerprint:
-            return self._unavailable(
-                "Die geprüfte Datei enthält keinen "
-                "Quality-Fingerprint."
-            )
+            return self._unavailable("Die geprüfte Datei enthält keinen Quality-Fingerprint.")
 
         metrics: dict[str, dict[str, Any]] = {}
 
@@ -97,9 +91,7 @@ class FingerprintCompareService:
                 tolerance=float(config["tolerance"]),
             )
 
-        quality_events = self._apply_context_rules(
-            metrics
-        )
+        quality_events = self._apply_context_rules(metrics)
 
         (
             metric_similarity,
@@ -111,9 +103,7 @@ class FingerprintCompareService:
             candidate_fingerprint,
         )
 
-        hash_similarity = hash_comparison.get(
-            "similarity_percent"
-        )
+        hash_similarity = hash_comparison.get("similarity_percent")
 
         overall_similarity = self._overall_similarity(
             metric_similarity=metric_similarity,
@@ -126,11 +116,7 @@ class FingerprintCompareService:
             quality_events=quality_events,
         )
 
-        compared_count = sum(
-            1
-            for value in metrics.values()
-            if value["status"] != "unknown"
-        )
+        compared_count = sum(1 for value in metrics.values() if value["status"] != "unknown")
 
         return {
             "available": compared_count > 0,
@@ -141,42 +127,22 @@ class FingerprintCompareService:
                 2,
             ),
             "similarity_percent": (
-                round(overall_similarity, 2)
-                if overall_similarity is not None
-                else None
+                round(overall_similarity, 2) if overall_similarity is not None else None
             ),
             "metric_similarity_percent": (
-                round(metric_similarity, 2)
-                if metric_similarity is not None
-                else None
+                round(metric_similarity, 2) if metric_similarity is not None else None
             ),
             "compared_metric_count": compared_count,
             "quality_events": quality_events,
             "metrics": metrics,
             "perceptual_hash": hash_comparison,
             "reference": {
-                "sample_count": self._integer(
-                    reference_fingerprint.get(
-                        "sample_count"
-                    )
-                ),
-                "representative_hash": (
-                    reference_fingerprint.get(
-                        "representative_hash"
-                    )
-                ),
+                "sample_count": self._integer(reference_fingerprint.get("sample_count")),
+                "representative_hash": (reference_fingerprint.get("representative_hash")),
             },
             "candidate": {
-                "sample_count": self._integer(
-                    candidate_fingerprint.get(
-                        "sample_count"
-                    )
-                ),
-                "representative_hash": (
-                    candidate_fingerprint.get(
-                        "representative_hash"
-                    )
-                ),
+                "sample_count": self._integer(candidate_fingerprint.get("sample_count")),
+                "representative_hash": (candidate_fingerprint.get("representative_hash")),
             },
         }
 
@@ -191,44 +157,22 @@ class FingerprintCompareService:
         blockiness = metrics.get("blockiness", {})
         contrast = metrics.get("contrast", {})
 
-        sharpness_difference = self._number(
-            sharpness.get("difference_percent")
-        )
+        sharpness_difference = self._number(sharpness.get("difference_percent"))
 
-        contrast_difference = self._number(
-            contrast.get("difference_percent")
-        )
+        contrast_difference = self._number(contrast.get("difference_percent"))
 
-        strong_detail_loss = (
-            sharpness_difference is not None
-            and sharpness_difference <= -25.0
-        )
+        strong_detail_loss = sharpness_difference is not None and sharpness_difference <= -25.0
 
-        severe_detail_loss = (
-            sharpness_difference is not None
-            and sharpness_difference <= -60.0
-        )
+        severe_detail_loss = sharpness_difference is not None and sharpness_difference <= -60.0
 
-        apparent_denoising = (
-            noise.get("status") == "better"
-        )
+        apparent_denoising = noise.get("status") == "better"
 
-        apparent_deblocking = (
-            blockiness.get("status") == "better"
-        )
+        apparent_deblocking = blockiness.get("status") == "better"
 
-        contrast_loss = (
-            contrast_difference is not None
-            and contrast_difference <= -12.0
-        )
+        contrast_loss = contrast_difference is not None and contrast_difference <= -12.0
 
-        blur_detected = (
-            strong_detail_loss
-            and (
-                apparent_denoising
-                or apparent_deblocking
-                or contrast_loss
-            )
+        blur_detected = strong_detail_loss and (
+            apparent_denoising or apparent_deblocking or contrast_loss
         )
 
         if strong_detail_loss:
@@ -240,10 +184,7 @@ class FingerprintCompareService:
         if blur_detected:
             events.append("blur_detected")
 
-        if (
-            strong_detail_loss
-            and apparent_denoising
-        ):
+        if strong_detail_loss and apparent_denoising:
             self._invalidate_false_improvement(
                 noise,
                 reason=(
@@ -254,10 +195,7 @@ class FingerprintCompareService:
                 ),
             )
 
-        if (
-            strong_detail_loss
-            and apparent_deblocking
-        ):
+        if strong_detail_loss and apparent_deblocking:
             self._invalidate_false_improvement(
                 blockiness,
                 reason=(
@@ -273,11 +211,7 @@ class FingerprintCompareService:
             {},
         )
 
-        if (
-            strong_detail_loss
-            and clipped_white.get("status")
-            == "better"
-        ):
+        if strong_detail_loss and clipped_white.get("status") == "better":
             self._invalidate_false_improvement(
                 clipped_white,
                 reason=(
@@ -296,9 +230,7 @@ class FingerprintCompareService:
         *,
         reason: str,
     ) -> None:
-        metric["original_status"] = metric.get(
-            "status"
-        )
+        metric["original_status"] = metric.get("status")
         metric["status"] = "context_neutral"
         metric["directional_score"] = 0.0
         metric["context_adjusted"] = True
@@ -323,43 +255,27 @@ class FingerprintCompareService:
                 {},
             )
 
-            weight = float(
-                config.get("weight", 1.0)
-            )
+            weight = float(config.get("weight", 1.0))
 
-            similarity = self._number(
-                result.get("similarity_percent")
-            )
+            similarity = self._number(result.get("similarity_percent"))
 
             if similarity is not None:
-                weighted_similarity += (
-                    similarity * weight
-                )
+                weighted_similarity += similarity * weight
                 similarity_weight += weight
 
-            directional_value = self._number(
-                result.get("directional_score")
-            )
+            directional_value = self._number(result.get("directional_score"))
 
             if directional_value is not None:
-                weighted_direction += (
-                    directional_value * weight
-                )
+                weighted_direction += directional_value * weight
                 directional_weight += weight
 
         if similarity_weight > 0:
-            metric_similarity = (
-                weighted_similarity
-                / similarity_weight
-            )
+            metric_similarity = weighted_similarity / similarity_weight
         else:
             metric_similarity = None
 
         if directional_weight > 0:
-            visual_difference = (
-                weighted_direction
-                / directional_weight
-            )
+            visual_difference = weighted_direction / directional_weight
         else:
             visual_difference = 0.0
 
@@ -375,15 +291,11 @@ class FingerprintCompareService:
         metrics: dict[str, dict[str, Any]],
         quality_events: list[str],
     ) -> str:
-        sharpness_difference = (
-            FingerprintCompareService._number(
-                metrics.get(
-                    "sharpness",
-                    {},
-                ).get(
-                    "difference_percent"
-                )
-            )
+        sharpness_difference = FingerprintCompareService._number(
+            metrics.get(
+                "sharpness",
+                {},
+            ).get("difference_percent")
         )
 
         if "severe_detail_loss" in quality_events:
@@ -392,10 +304,7 @@ class FingerprintCompareService:
         if "blur_detected" in quality_events:
             return "worse"
 
-        if (
-            sharpness_difference is not None
-            and sharpness_difference <= -25.0
-        ):
+        if sharpness_difference is not None and sharpness_difference <= -25.0:
             return "worse"
 
         if visual_difference > 7.5:
@@ -414,10 +323,7 @@ class FingerprintCompareService:
         direction: str,
         tolerance: float,
     ) -> dict[str, Any]:
-        if (
-            reference_value is None
-            or candidate_value is None
-        ):
+        if reference_value is None or candidate_value is None:
             return {
                 "status": "unknown",
                 "reference": reference_value,
@@ -428,26 +334,21 @@ class FingerprintCompareService:
                 "directional_score": None,
             }
 
-        difference = (
-            candidate_value - reference_value
-        )
+        difference = candidate_value - reference_value
 
         denominator = max(
             abs(reference_value),
             0.000001,
         )
 
-        difference_ratio = (
-            difference / denominator
-        )
+        difference_ratio = difference / denominator
 
-        absolute_ratio = abs(
-            difference_ratio
-        )
+        absolute_ratio = abs(difference_ratio)
 
         similarity = max(
             0.0,
-            100.0 - min(
+            100.0
+            - min(
                 absolute_ratio * 100.0,
                 100.0,
             ),
@@ -524,17 +425,9 @@ class FingerprintCompareService:
         reference_fingerprint: dict[str, Any],
         candidate_fingerprint: dict[str, Any],
     ) -> dict[str, Any]:
-        reference_hash = cls._hash_text(
-            reference_fingerprint.get(
-                "representative_hash"
-            )
-        )
+        reference_hash = cls._hash_text(reference_fingerprint.get("representative_hash"))
 
-        candidate_hash = cls._hash_text(
-            candidate_fingerprint.get(
-                "representative_hash"
-            )
-        )
+        candidate_hash = cls._hash_text(candidate_fingerprint.get("representative_hash"))
 
         if not reference_hash or not candidate_hash:
             return {
@@ -554,10 +447,7 @@ class FingerprintCompareService:
                 "hamming_distance": None,
                 "bit_count": None,
                 "similarity_percent": None,
-                "warning": (
-                    "Die Hash-Längen stimmen "
-                    "nicht überein."
-                ),
+                "warning": ("Die Hash-Längen stimmen nicht überein."),
             }
 
         try:
@@ -577,26 +467,14 @@ class FingerprintCompareService:
                 "hamming_distance": None,
                 "bit_count": None,
                 "similarity_percent": None,
-                "warning": (
-                    "Mindestens ein Hash ist "
-                    "ungültig."
-                ),
+                "warning": ("Mindestens ein Hash ist ungültig."),
             }
 
         bit_count = len(reference_hash) * 4
 
-        hamming_distance = (
-            reference_number
-            ^ candidate_number
-        ).bit_count()
+        hamming_distance = (reference_number ^ candidate_number).bit_count()
 
-        similarity = (
-            100.0
-            * (
-                bit_count - hamming_distance
-            )
-            / bit_count
-        )
+        similarity = 100.0 * (bit_count - hamming_distance) / bit_count
 
         return {
             "available": True,
@@ -616,15 +494,9 @@ class FingerprintCompareService:
         metric_similarity: float | None,
         hash_similarity: Any,
     ) -> float | None:
-        hash_value = (
-            FingerprintCompareService
-            ._number(hash_similarity)
-        )
+        hash_value = FingerprintCompareService._number(hash_similarity)
 
-        if (
-            metric_similarity is None
-            and hash_value is None
-        ):
+        if metric_similarity is None and hash_value is None:
             return None
 
         if metric_similarity is None:
@@ -633,29 +505,19 @@ class FingerprintCompareService:
         if hash_value is None:
             return metric_similarity
 
-        return (
-            metric_similarity * 0.90
-            + hash_value * 0.10
-        )
+        return metric_similarity * 0.90 + hash_value * 0.10
 
     @staticmethod
     def _metric_average(
         fingerprint: dict[str, Any],
         metric_name: str,
     ) -> float | None:
-        value = fingerprint.get(
-            metric_name
-        )
+        value = fingerprint.get(metric_name)
 
         if isinstance(value, dict):
-            value = value.get(
-                "average"
-            )
+            value = value.get("average")
 
-        return (
-            FingerprintCompareService
-            ._number(value)
-        )
+        return FingerprintCompareService._number(value)
 
     @staticmethod
     def _number(
@@ -691,9 +553,7 @@ class FingerprintCompareService:
         if value is None:
             return None
 
-        normalized = str(
-            value
-        ).strip().lower()
+        normalized = str(value).strip().lower()
 
         return normalized or None
 

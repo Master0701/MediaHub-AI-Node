@@ -1,4 +1,3 @@
-from pathlib import Path
 from typing import Any
 
 import cv2
@@ -42,11 +41,7 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
         return (
             context.file_path.exists()
             and context.file_path.is_file()
-            and bool(
-                context.shared_data.get(
-                    "video_streams"
-                )
-            )
+            and bool(context.shared_data.get("video_streams"))
         )
 
     def analyze(
@@ -68,26 +63,19 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
             fallback=640,
         )
 
-        capture = cv2.VideoCapture(
-            str(context.file_path)
-        )
+        capture = cv2.VideoCapture(str(context.file_path))
 
         if not capture.isOpened():
             return AnalyzerResult(
                 analyzer=self.name,
                 success=False,
-                errors=[
-                    "OpenCV konnte die Videodatei "
-                    "nicht öffnen."
-                ],
+                errors=["OpenCV konnte die Videodatei nicht öffnen."],
             )
 
         try:
-            duration_seconds = (
-                self._duration_seconds(
-                    context,
-                    capture,
-                )
+            duration_seconds = self._duration_seconds(
+                context,
+                capture,
             )
 
             timestamps = self._timestamps(
@@ -121,14 +109,10 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
                     maximum_width,
                 )
 
-                metrics = self._analyze_frame(
-                    frame
-                )
+                metrics = self._analyze_frame(frame)
 
                 metrics["sample_index"] = index
-                metrics["timestamp_seconds"] = (
-                    round(timestamp, 3)
-                )
+                metrics["timestamp_seconds"] = round(timestamp, 3)
 
                 samples.append(metrics)
 
@@ -137,29 +121,21 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
                     analyzer=self.name,
                     success=False,
                     errors=[
-                        "Es konnte kein geeignetes "
-                        "Stichprobenbild aus dem Video "
-                        "gelesen werden."
+                        "Es konnte kein geeignetes Stichprobenbild aus dem Video gelesen werden."
                     ],
                     warnings=warnings,
                 )
 
             fingerprint = self._aggregate(
                 samples=samples,
-                requested_sample_count=(
-                    sample_count
-                ),
+                requested_sample_count=(sample_count),
                 duration_seconds=duration_seconds,
             )
 
             return AnalyzerResult(
                 analyzer=self.name,
                 success=True,
-                data={
-                    "quality_fingerprint": (
-                        fingerprint
-                    )
-                },
+                data={"quality_fingerprint": (fingerprint)},
                 warnings=warnings,
             )
 
@@ -180,13 +156,9 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
             cv2.COLOR_BGR2HSV,
         )
 
-        brightness = float(
-            np.mean(gray)
-        )
+        brightness = float(np.mean(gray))
 
-        contrast = float(
-            np.std(gray)
-        )
+        contrast = float(np.std(gray))
 
         sharpness = float(
             cv2.Laplacian(
@@ -195,29 +167,17 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
             ).var()
         )
 
-        saturation = float(
-            np.mean(hsv[:, :, 1])
-        )
+        saturation = float(np.mean(hsv[:, :, 1]))
 
-        black_ratio = float(
-            np.mean(gray <= 16)
-        )
+        black_ratio = float(np.mean(gray <= 16))
 
-        clipped_white_ratio = float(
-            np.mean(gray >= 245)
-        )
+        clipped_white_ratio = float(np.mean(gray >= 245))
 
-        noise = self._estimate_noise(
-            gray
-        )
+        noise = self._estimate_noise(gray)
 
-        blockiness = self._estimate_blockiness(
-            gray
-        )
+        blockiness = self._estimate_blockiness(gray)
 
-        perceptual_hash = (
-            self._perceptual_hash(frame)
-        )
+        perceptual_hash = self._perceptual_hash(frame)
 
         return {
             "brightness": round(
@@ -252,15 +212,9 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
                 blockiness,
                 4,
             ),
-            "perceptual_hash": (
-                perceptual_hash
-            ),
-            "width": int(
-                frame.shape[1]
-            ),
-            "height": int(
-                frame.shape[0]
-            ),
+            "perceptual_hash": (perceptual_hash),
+            "width": int(frame.shape[1]),
+            "height": int(frame.shape[0]),
         }
 
     def _aggregate(
@@ -311,106 +265,53 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
         )
 
         hashes = [
-            str(sample["perceptual_hash"])
-            for sample in samples
-            if sample.get(
-                "perceptual_hash"
-            )
+            str(sample["perceptual_hash"]) for sample in samples if sample.get("perceptual_hash")
         ]
 
-        average_sharpness = self._average(
-            sharpness
-        )
+        average_sharpness = self._average(sharpness)
 
-        average_noise = self._average(
-            noise
-        )
+        average_noise = self._average(noise)
 
-        average_blockiness = self._average(
-            blockiness
-        )
+        average_blockiness = self._average(blockiness)
 
-        black_frame_count = sum(
-            1
-            for value in black_ratio
-            if value >= 0.90
-        )
+        black_frame_count = sum(1 for value in black_ratio if value >= 0.90)
 
-        dark_frame_count = sum(
-            1
-            for value in brightness
-            if value <= 25.0
-        )
+        dark_frame_count = sum(1 for value in brightness if value <= 25.0)
 
         return {
             "version": "1",
             "analyzer": self.name,
-            "requested_sample_count": (
-                requested_sample_count
-            ),
+            "requested_sample_count": (requested_sample_count),
             "sample_count": len(samples),
             "duration_seconds": round(
                 duration_seconds,
                 3,
             ),
-            "brightness": self._statistics(
-                brightness
-            ),
-            "contrast": self._statistics(
-                contrast
-            ),
+            "brightness": self._statistics(brightness),
+            "contrast": self._statistics(contrast),
             "sharpness": {
-                **self._statistics(
-                    sharpness
-                ),
-                "level": self._sharpness_level(
-                    average_sharpness
-                ),
+                **self._statistics(sharpness),
+                "level": self._sharpness_level(average_sharpness),
             },
             "noise": {
                 **self._statistics(noise),
-                "level": self._noise_level(
-                    average_noise
-                ),
+                "level": self._noise_level(average_noise),
             },
-            "saturation": self._statistics(
-                saturation
-            ),
-            "black_ratio": self._statistics(
-                black_ratio
-            ),
-            "clipped_white_ratio": (
-                self._statistics(
-                    clipped_white
-                )
-            ),
+            "saturation": self._statistics(saturation),
+            "black_ratio": self._statistics(black_ratio),
+            "clipped_white_ratio": (self._statistics(clipped_white)),
             "blockiness": {
-                **self._statistics(
-                    blockiness
-                ),
-                "level": (
-                    self._blockiness_level(
-                        average_blockiness
-                    )
-                ),
+                **self._statistics(blockiness),
+                "level": (self._blockiness_level(average_blockiness)),
             },
-            "black_frame_count": (
-                black_frame_count
-            ),
-            "dark_frame_count": (
-                dark_frame_count
-            ),
+            "black_frame_count": (black_frame_count),
+            "dark_frame_count": (dark_frame_count),
             "black_frame_ratio": round(
-                black_frame_count
-                / max(len(samples), 1),
+                black_frame_count / max(len(samples), 1),
                 6,
             ),
             "perceptual_hashes": hashes,
-            "representative_hash": (
-                self._representative_hash(
-                    hashes
-                )
-            ),
+            "representative_hash": (self._representative_hash(hashes)),
             "samples": samples,
         }
 
@@ -476,17 +377,13 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
             blurred,
         )
 
-        return float(
-            np.mean(difference)
-        )
+        return float(np.mean(difference))
 
     @staticmethod
     def _estimate_blockiness(
         gray: np.ndarray,
     ) -> float:
-        image = gray.astype(
-            np.float32
-        )
+        image = gray.astype(np.float32)
 
         vertical_values = []
 
@@ -495,14 +392,9 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
             image.shape[1],
             8,
         ):
-            difference = np.abs(
-                image[:, column]
-                - image[:, column - 1]
-            )
+            difference = np.abs(image[:, column] - image[:, column - 1])
 
-            vertical_values.append(
-                float(np.mean(difference))
-            )
+            vertical_values.append(float(np.mean(difference)))
 
         horizontal_values = []
 
@@ -511,26 +403,16 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
             image.shape[0],
             8,
         ):
-            difference = np.abs(
-                image[row, :]
-                - image[row - 1, :]
-            )
+            difference = np.abs(image[row, :] - image[row - 1, :])
 
-            horizontal_values.append(
-                float(np.mean(difference))
-            )
+            horizontal_values.append(float(np.mean(difference)))
 
-        values = (
-            vertical_values
-            + horizontal_values
-        )
+        values = vertical_values + horizontal_values
 
         if not values:
             return 0.0
 
-        return float(
-            np.mean(values)
-        )
+        return float(np.mean(values))
 
     @staticmethod
     def _perceptual_hash(
@@ -544,9 +426,7 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
 
             image = Image.fromarray(rgb)
 
-            return str(
-                imagehash.phash(image)
-            )
+            return str(imagehash.phash(image))
 
         except Exception:
             return None
@@ -556,9 +436,7 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
         context: AnalyzerContext,
         capture: cv2.VideoCapture,
     ) -> float:
-        duration = context.shared_data.get(
-            "duration_seconds"
-        )
+        duration = context.shared_data.get("duration_seconds")
 
         try:
             parsed = float(duration)
@@ -568,18 +446,12 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
         except (TypeError, ValueError):
             pass
 
-        frame_count = capture.get(
-            cv2.CAP_PROP_FRAME_COUNT
-        )
+        frame_count = capture.get(cv2.CAP_PROP_FRAME_COUNT)
 
-        frame_rate = capture.get(
-            cv2.CAP_PROP_FPS
-        )
+        frame_rate = capture.get(cv2.CAP_PROP_FPS)
 
         if frame_count > 0 and frame_rate > 0:
-            return float(
-                frame_count / frame_rate
-            )
+            return float(frame_count / frame_rate)
 
         return 1.0
 
@@ -594,27 +466,14 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
         )
 
         if sample_count <= 1:
-            return [
-                duration * 0.5
-            ]
+            return [duration * 0.5]
 
         start_ratio = 0.05
         end_ratio = 0.95
 
         return [
-            duration
-            * (
-                start_ratio
-                + (
-                    end_ratio
-                    - start_ratio
-                )
-                * index
-                / (sample_count - 1)
-            )
-            for index in range(
-                sample_count
-            )
+            duration * (start_ratio + (end_ratio - start_ratio) * index / (sample_count - 1))
+            for index in range(sample_count)
         ]
 
     @classmethod
@@ -625,9 +484,7 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
         try:
             parsed = int(value)
         except (TypeError, ValueError):
-            parsed = (
-                cls.DEFAULT_SAMPLE_COUNT
-            )
+            parsed = cls.DEFAULT_SAMPLE_COUNT
 
         return max(
             cls.MIN_SAMPLE_COUNT,
@@ -664,9 +521,7 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
             value = sample.get(key)
 
             try:
-                values.append(
-                    float(value)
-                )
+                values.append(float(value))
             except (TypeError, ValueError):
                 continue
 
@@ -679,9 +534,7 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
         if not values:
             return 0.0
 
-        return float(
-            np.mean(values)
-        )
+        return float(np.mean(values))
 
     @staticmethod
     def _statistics(
@@ -780,6 +633,4 @@ class QualityFingerprintAnalyzer(BaseAnalyzer):
         if not hashes:
             return None
 
-        return hashes[
-            len(hashes) // 2
-        ]
+        return hashes[len(hashes) // 2]

@@ -6,7 +6,6 @@ from app.analyzer.manager import (
     analyzer_manager,
 )
 
-
 router = APIRouter(
     prefix="/analyzers",
     tags=["Analyzers"],
@@ -14,11 +13,8 @@ router = APIRouter(
 
 
 @router.get("")
-def list_analyzers_endpoint(
-) -> dict[str, Any]:
-    analyzers = (
-        analyzer_manager.list_analyzers()
-    )
+def list_analyzers_endpoint() -> dict[str, Any]:
+    analyzers = analyzer_manager.list_analyzers()
 
     return {
         "count": len(analyzers),
@@ -30,19 +26,12 @@ def list_analyzers_endpoint(
 def get_analyzer_endpoint(
     analyzer_name: str,
 ) -> dict[str, Any]:
-    normalized_name = (
-        analyzer_name.strip().lower()
-    )
+    normalized_name = analyzer_name.strip().lower()
 
-    analyzers = (
-        analyzer_manager.list_analyzers()
-    )
+    analyzers = analyzer_manager.list_analyzers()
 
     for analyzer in analyzers:
-        if (
-            analyzer["name"]
-            == normalized_name
-        ):
+        if analyzer["name"] == normalized_name:
             return analyzer
 
     return {

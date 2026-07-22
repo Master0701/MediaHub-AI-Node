@@ -15,51 +15,24 @@ def migrate_relation_types() -> None:
 
     try:
         relations = list(
-            db.scalars(
-                select(
-                    KnowledgeRelation
-                ).order_by(
-                    KnowledgeRelation.id.asc()
-                )
-            ).all()
+            db.scalars(select(KnowledgeRelation).order_by(KnowledgeRelation.id.asc())).all()
         )
 
         for relation in relations:
-            old_relation_type = (
-                relation.relation_type
-            )
+            old_relation_type = relation.relation_type
 
-            new_relation_type = (
-                normalize_relation_type(
-                    old_relation_type
-                )
-            )
+            new_relation_type = normalize_relation_type(old_relation_type)
 
             old_order_type = relation.order_type
 
-            new_order_type = (
-                normalize_relation_type(
-                    old_order_type
-                )
-                if old_order_type
-                else None
-            )
+            new_order_type = normalize_relation_type(old_order_type) if old_order_type else None
 
-            if (
-                old_relation_type
-                == new_relation_type
-                and old_order_type
-                == new_order_type
-            ):
+            if old_relation_type == new_relation_type and old_order_type == new_order_type:
                 unchanged += 1
                 continue
 
-            relation.relation_type = (
-                new_relation_type
-            )
-            relation.order_type = (
-                new_order_type
-            )
+            relation.relation_type = new_relation_type
+            relation.order_type = new_order_type
 
             try:
                 db.flush()
@@ -76,11 +49,7 @@ def migrate_relation_types() -> None:
 
             changed += 1
 
-            print(
-                f"Beziehung {relation.id}: "
-                f"{old_relation_type!r} "
-                f"-> {new_relation_type!r}"
-            )
+            print(f"Beziehung {relation.id}: {old_relation_type!r} -> {new_relation_type!r}")
 
         db.commit()
 

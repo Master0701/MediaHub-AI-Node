@@ -19,7 +19,6 @@ from app.services.provider_service import (
     set_provider_enabled,
 )
 
-
 router = APIRouter(
     prefix="/providers",
     tags=["Providers"],
@@ -48,10 +47,7 @@ def get_database() -> Generator[Session, None, None]:
 def list_providers_endpoint(
     db: Session = Depends(get_database),
 ) -> list[dict[str, Any]]:
-    return [
-        provider_to_dict(provider)
-        for provider in list_providers(db)
-    ]
+    return [provider_to_dict(provider) for provider in list_providers(db)]
 
 
 @router.get("/{provider_name}/health")
@@ -77,9 +73,7 @@ def provider_health_endpoint(
         )
 
     try:
-        provider = provider_registry.require(
-            provider_name
-        )
+        provider = provider_registry.require(provider_name)
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -113,9 +107,7 @@ def provider_execute_endpoint(
         )
 
     try:
-        provider = provider_registry.require(
-            provider_name
-        )
+        provider = provider_registry.require(provider_name)
 
         return provider.execute(
             task=request.task,

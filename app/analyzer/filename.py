@@ -28,22 +28,12 @@ class FilenameAnalyzer(BaseAnalyzer):
     EDITION_PATTERNS = {
         "uncut": r"\buncut\b",
         "extended": r"\bextended(?:[ ._-]*cut)?\b",
-        "directors_cut": (
-            r"\bdirector(?:'s|s)?[ ._-]*cut\b"
-        ),
-        "theatrical_cut": (
-            r"\btheatrical(?:[ ._-]*cut)?\b"
-        ),
+        "directors_cut": (r"\bdirector(?:'s|s)?[ ._-]*cut\b"),
+        "theatrical_cut": (r"\btheatrical(?:[ ._-]*cut)?\b"),
         "remastered": r"\bremaster(?:ed)?\b",
-        "special_edition": (
-            r"\bspecial[ ._-]*edition\b"
-        ),
-        "anniversary_edition": (
-            r"\banniversary[ ._-]*edition\b"
-        ),
-        "ultimate_edition": (
-            r"\bultimate[ ._-]*edition\b"
-        ),
+        "special_edition": (r"\bspecial[ ._-]*edition\b"),
+        "anniversary_edition": (r"\banniversary[ ._-]*edition\b"),
+        "ultimate_edition": (r"\bultimate[ ._-]*edition\b"),
     }
 
     TECHNICAL_PATTERNS = [
@@ -123,9 +113,7 @@ class FilenameAnalyzer(BaseAnalyzer):
                 re.IGNORECASE,
             )
 
-        editions = self._detect_editions(
-            cleaned_name
-        )
+        editions = self._detect_editions(cleaned_name)
 
         title_candidate = self._build_title(
             cleaned_name,
@@ -133,11 +121,7 @@ class FilenameAnalyzer(BaseAnalyzer):
             episode_match,
         )
 
-        likely_media_type = (
-            "episode"
-            if episode_match
-            else "movie"
-        )
+        likely_media_type = "episode" if episode_match else "movie"
 
         data: dict[str, Any] = {
             "filename": filename,
@@ -146,21 +130,9 @@ class FilenameAnalyzer(BaseAnalyzer):
             "cleaned_name": cleaned_name,
             "title_candidate": title_candidate,
             "likely_media_type": likely_media_type,
-            "year": (
-                int(year_match.group(1))
-                if year_match
-                else None
-            ),
-            "season": (
-                int(episode_match.group(1))
-                if episode_match
-                else None
-            ),
-            "episode": (
-                int(episode_match.group(2))
-                if episode_match
-                else None
-            ),
+            "year": (int(year_match.group(1)) if year_match else None),
+            "season": (int(episode_match.group(1)) if episode_match else None),
+            "episode": (int(episode_match.group(2)) if episode_match else None),
             "editions": editions,
         }
 
@@ -176,9 +148,7 @@ class FilenameAnalyzer(BaseAnalyzer):
     ) -> list[str]:
         editions: list[str] = []
 
-        for edition, pattern in (
-            self.EDITION_PATTERNS.items()
-        ):
+        for edition, pattern in self.EDITION_PATTERNS.items():
             if re.search(
                 pattern,
                 cleaned_name,
@@ -199,19 +169,13 @@ class FilenameAnalyzer(BaseAnalyzer):
         cut_positions = []
 
         if episode_match:
-            cut_positions.append(
-                episode_match.start()
-            )
+            cut_positions.append(episode_match.start())
 
         if year_match:
-            cut_positions.append(
-                year_match.start()
-            )
+            cut_positions.append(year_match.start())
 
         if cut_positions:
-            title = title[
-                :min(cut_positions)
-            ]
+            title = title[: min(cut_positions)]
 
         for pattern in self.TECHNICAL_PATTERNS:
             title = re.sub(
@@ -221,9 +185,7 @@ class FilenameAnalyzer(BaseAnalyzer):
                 flags=re.IGNORECASE,
             )
 
-        for pattern in (
-            self.EDITION_PATTERNS.values()
-        ):
+        for pattern in self.EDITION_PATTERNS.values():
             title = re.sub(
                 pattern,
                 " ",

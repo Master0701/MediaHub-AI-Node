@@ -31,15 +31,9 @@ class KnowledgeImportRequest:
     media_type: str
     year: int | None = None
     original_title: str | None = None
-    aliases: list[dict[str, Any] | str] = field(
-        default_factory=list
-    )
-    external_ids: dict[str, Any] = field(
-        default_factory=dict
-    )
-    metadata: dict[str, Any] = field(
-        default_factory=dict
-    )
+    aliases: list[dict[str, Any] | str] = field(default_factory=list)
+    external_ids: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     source: str | None = None
 
 
@@ -104,9 +98,7 @@ class KnowledgeImporter:
     ) -> None:
         self.db = db
         self.matcher = KnowledgeMatcher(db)
-        self.automatic_match_score = (
-            automatic_match_score
-        )
+        self.automatic_match_score = automatic_match_score
         self.conflict_score = conflict_score
 
     def import_item(
@@ -136,15 +128,10 @@ class KnowledgeImporter:
                 item_id=None,
                 item=None,
                 match=None,
-                candidates=[
-                    match.to_dict()
-                    for match in decision["matches"]
-                ],
+                candidates=[match.to_dict() for match in decision["matches"]],
                 changes={},
                 message=(
-                    "Mehrere mögliche Wissenseinträge "
-                    "wurden gefunden. Es wurde nichts "
-                    "verändert."
+                    "Mehrere mögliche Wissenseinträge wurden gefunden. Es wurde nichts verändert."
                 ),
             )
 
@@ -153,14 +140,9 @@ class KnowledgeImporter:
                 return KnowledgeImportResult(
                     status="would_create",
                     item_id=None,
-                    item=self._request_to_dict(
-                        request
-                    ),
+                    item=self._request_to_dict(request),
                     match=None,
-                    candidates=[
-                        match.to_dict()
-                        for match in matches
-                    ],
+                    candidates=[match.to_dict() for match in matches],
                     changes={
                         "create_item": True,
                     },
@@ -184,9 +166,7 @@ class KnowledgeImporter:
             changes = self._calculate_changes(
                 item=item,
                 request=request,
-                overwrite_existing=(
-                    overwrite_existing
-                ),
+                overwrite_existing=(overwrite_existing),
             )
 
             return KnowledgeImportResult(
@@ -194,10 +174,7 @@ class KnowledgeImporter:
                 item_id=item.id,
                 item=item_to_dict(item),
                 match=match.to_dict(),
-                candidates=[
-                    candidate.to_dict()
-                    for candidate in matches
-                ],
+                candidates=[candidate.to_dict() for candidate in matches],
                 changes=changes,
                 message=(
                     "Ein eindeutiger Treffer wurde "
@@ -211,9 +188,7 @@ class KnowledgeImporter:
             request=request,
             match=match,
             commit=commit,
-            overwrite_existing=(
-                overwrite_existing
-            ),
+            overwrite_existing=(overwrite_existing),
             candidates=matches,
         )
 
@@ -226,20 +201,10 @@ class KnowledgeImporter:
                 "status": "create",
             }
 
-        strong_matches = [
-            match
-            for match in matches
-            if (
-                match.score
-                >= self.conflict_score
-            )
-        ]
+        strong_matches = [match for match in matches if (match.score >= self.conflict_score)]
 
         exact_matches = [
-            match
-            for match in strong_matches
-            if match.match_type
-            in self.EXACT_MATCH_TYPES
+            match for match in strong_matches if match.match_type in self.EXACT_MATCH_TYPES
         ]
 
         if len(exact_matches) == 1:
@@ -250,18 +215,13 @@ class KnowledgeImporter:
 
         if len(exact_matches) > 1:
             external_id_matches = [
-                match
-                for match in exact_matches
-                if match.match_type
-                == "external_id"
+                match for match in exact_matches if match.match_type == "external_id"
             ]
 
             if len(external_id_matches) == 1:
                 return {
                     "status": "update",
-                    "match": (
-                        external_id_matches[0]
-                    ),
+                    "match": (external_id_matches[0]),
                 }
 
             return {
@@ -271,29 +231,19 @@ class KnowledgeImporter:
 
         best_match = matches[0]
 
-        if (
-            best_match.score
-            < self.automatic_match_score
-        ):
+        if best_match.score < self.automatic_match_score:
             return {
                 "status": "create",
             }
 
         nearly_equal_matches = [
-            match
-            for match in strong_matches
-            if abs(
-                best_match.score
-                - match.score
-            ) <= 0.02
+            match for match in strong_matches if abs(best_match.score - match.score) <= 0.02
         ]
 
         if len(nearly_equal_matches) > 1:
             return {
                 "status": "conflict",
-                "matches": (
-                    nearly_equal_matches
-                ),
+                "matches": (nearly_equal_matches),
             }
 
         return {
@@ -309,14 +259,10 @@ class KnowledgeImporter:
     ) -> KnowledgeImportResult:
         item = KnowledgeItem(
             title=request.title,
-            original_title=(
-                request.original_title
-            ),
+            original_title=(request.original_title),
             media_type=request.media_type,
             year=request.year,
-            external_ids=encode_json(
-                request.external_ids
-            ),
+            external_ids=encode_json(request.external_ids),
             metadata_json=encode_json(
                 self._metadata_with_source(
                     request.metadata,
@@ -351,10 +297,7 @@ class KnowledgeImporter:
                     "created": True,
                     **alias_changes,
                 },
-                message=(
-                    "Neuer Wissenseintrag wurde "
-                    "erstellt."
-                ),
+                message=("Neuer Wissenseintrag wurde erstellt."),
             )
 
         except Exception:
@@ -377,9 +320,7 @@ class KnowledgeImporter:
             changes = self._apply_changes(
                 item=item,
                 request=request,
-                overwrite_existing=(
-                    overwrite_existing
-                ),
+                overwrite_existing=(overwrite_existing),
             )
 
             self.db.flush()
@@ -389,32 +330,19 @@ class KnowledgeImporter:
 
             item = self._load_item(item.id)
 
-            changed = self._has_changes(
-                changes
-            )
+            changed = self._has_changes(changes)
 
             return KnowledgeImportResult(
-                status=(
-                    "updated"
-                    if changed
-                    else "unchanged"
-                ),
+                status=("updated" if changed else "unchanged"),
                 item_id=item.id,
                 item=item_to_dict(item),
                 match=match.to_dict(),
-                candidates=[
-                    candidate.to_dict()
-                    for candidate in candidates
-                ],
+                candidates=[candidate.to_dict() for candidate in candidates],
                 changes=changes,
                 message=(
-                    "Vorhandener Wissenseintrag "
-                    "wurde ergänzt."
+                    "Vorhandener Wissenseintrag wurde ergänzt."
                     if changed
-                    else
-                    "Der Wissenseintrag war bereits "
-                    "vollständig. Es wurde nichts "
-                    "verändert."
+                    else "Der Wissenseintrag war bereits vollständig. Es wurde nichts verändert."
                 ),
             )
 
@@ -432,18 +360,12 @@ class KnowledgeImporter:
         changes = self._calculate_changes(
             item=item,
             request=request,
-            overwrite_existing=(
-                overwrite_existing
-            ),
+            overwrite_existing=(overwrite_existing),
         )
 
-        field_changes = changes[
-            "fields"
-        ]
+        field_changes = changes["fields"]
 
-        for field_name, change in (
-            field_changes.items()
-        ):
+        for field_name, change in field_changes.items():
             setattr(
                 item,
                 field_name,
@@ -451,14 +373,10 @@ class KnowledgeImporter:
             )
 
         if changes["external_ids_changed"]:
-            item.external_ids = encode_json(
-                changes["external_ids"]
-            )
+            item.external_ids = encode_json(changes["external_ids"])
 
         if changes["metadata_changed"]:
-            item.metadata_json = encode_json(
-                changes["metadata"]
-            )
+            item.metadata_json = encode_json(changes["metadata"])
 
         alias_changes = self._add_aliases(
             item=item,
@@ -476,25 +394,16 @@ class KnowledgeImporter:
         request: KnowledgeImportRequest,
         overwrite_existing: bool,
     ) -> dict[str, Any]:
-        field_changes: dict[
-            str,
-            dict[str, Any]
-        ] = {}
+        field_changes: dict[str, dict[str, Any]] = {}
 
         incoming_fields = {
             "title": request.title,
-            "original_title": (
-                request.original_title
-            ),
-            "media_type": (
-                request.media_type
-            ),
+            "original_title": (request.original_title),
+            "media_type": (request.media_type),
             "year": request.year,
         }
 
-        for field_name, incoming_value in (
-            incoming_fields.items()
-        ):
+        for field_name, incoming_value in incoming_fields.items():
             current_value = getattr(
                 item,
                 field_name,
@@ -503,17 +412,12 @@ class KnowledgeImporter:
             should_change = False
 
             if self._is_empty(current_value):
-                should_change = not self._is_empty(
-                    incoming_value
-                )
+                should_change = not self._is_empty(incoming_value)
 
             elif (
                 overwrite_existing
-                and not self._is_empty(
-                    incoming_value
-                )
-                and current_value
-                != incoming_value
+                and not self._is_empty(incoming_value)
+                and current_value != incoming_value
             ):
                 should_change = True
 
@@ -523,19 +427,9 @@ class KnowledgeImporter:
                     "new": incoming_value,
                 }
 
-        current_external_ids = (
-            normalize_external_ids(
-                decode_json(
-                    item.external_ids
-                )
-            )
-        )
+        current_external_ids = normalize_external_ids(decode_json(item.external_ids))
 
-        incoming_external_ids = (
-            normalize_external_ids(
-                request.external_ids
-            )
-        )
+        incoming_external_ids = normalize_external_ids(request.external_ids)
 
         if overwrite_existing:
             merged_external_ids = {
@@ -548,15 +442,11 @@ class KnowledgeImporter:
                 incoming_external_ids,
             )
 
-        current_metadata = decode_json(
-            item.metadata_json
-        )
+        current_metadata = decode_json(item.metadata_json)
 
-        incoming_metadata = (
-            self._metadata_with_source(
-                request.metadata,
-                request.source,
-            )
+        incoming_metadata = self._metadata_with_source(
+            request.metadata,
+            request.source,
         )
 
         if overwrite_existing:
@@ -577,30 +467,18 @@ class KnowledgeImporter:
 
         return {
             "fields": field_changes,
-            "external_ids": (
-                merged_external_ids
-            ),
-            "external_ids_changed": (
-                merged_external_ids
-                != current_external_ids
-            ),
+            "external_ids": (merged_external_ids),
+            "external_ids_changed": (merged_external_ids != current_external_ids),
             "metadata": merged_metadata,
-            "metadata_changed": (
-                merged_metadata
-                != current_metadata
-            ),
-            "aliases_to_add": (
-                alias_preview
-            ),
+            "metadata_changed": (merged_metadata != current_metadata),
+            "aliases_to_add": (alias_preview),
         }
 
     def _add_aliases(
         self,
         *,
         item: KnowledgeItem,
-        aliases: list[
-            dict[str, Any] | str
-        ],
+        aliases: list[dict[str, Any] | str],
     ) -> dict[str, Any]:
         existing_keys = {
             self._alias_key(
@@ -612,28 +490,20 @@ class KnowledgeImporter:
 
         primary_titles = {
             normalize_title(item.title),
-            normalize_title(
-                item.original_title
-            ),
+            normalize_title(item.original_title),
         }
 
         added: list[dict[str, Any]] = []
         skipped: list[dict[str, Any]] = []
 
         for alias_data in aliases:
-            parsed = self._parse_alias(
-                alias_data
-            )
+            parsed = self._parse_alias(alias_data)
 
             title = parsed["title"]
             language = parsed["language"]
-            alias_type = parsed[
-                "alias_type"
-            ]
+            alias_type = parsed["alias_type"]
 
-            normalized = normalize_title(
-                title
-            )
+            normalized = normalize_title(title)
 
             alias_key = self._alias_key(
                 title,
@@ -641,24 +511,30 @@ class KnowledgeImporter:
             )
 
             if not normalized:
-                skipped.append({
-                    **parsed,
-                    "reason": "empty_title",
-                })
+                skipped.append(
+                    {
+                        **parsed,
+                        "reason": "empty_title",
+                    }
+                )
                 continue
 
             if normalized in primary_titles:
-                skipped.append({
-                    **parsed,
-                    "reason": "primary_title",
-                })
+                skipped.append(
+                    {
+                        **parsed,
+                        "reason": "primary_title",
+                    }
+                )
                 continue
 
             if alias_key in existing_keys:
-                skipped.append({
-                    **parsed,
-                    "reason": "already_exists",
-                })
+                skipped.append(
+                    {
+                        **parsed,
+                        "reason": "already_exists",
+                    }
+                )
                 continue
 
             alias = KnowledgeAlias(
@@ -682,9 +558,7 @@ class KnowledgeImporter:
         self,
         *,
         item: KnowledgeItem,
-        aliases: list[
-            dict[str, Any] | str
-        ],
+        aliases: list[dict[str, Any] | str],
     ) -> list[dict[str, Any]]:
         existing_keys = {
             self._alias_key(
@@ -696,21 +570,15 @@ class KnowledgeImporter:
 
         primary_titles = {
             normalize_title(item.title),
-            normalize_title(
-                item.original_title
-            ),
+            normalize_title(item.original_title),
         }
 
         result = []
 
         for alias_data in aliases:
-            parsed = self._parse_alias(
-                alias_data
-            )
+            parsed = self._parse_alias(alias_data)
 
-            normalized = normalize_title(
-                parsed["title"]
-            )
+            normalized = normalize_title(parsed["title"])
 
             key = self._alias_key(
                 parsed["title"],
@@ -718,16 +586,15 @@ class KnowledgeImporter:
             )
 
             will_add = (
-                bool(normalized)
-                and normalized
-                not in primary_titles
-                and key not in existing_keys
+                bool(normalized) and normalized not in primary_titles and key not in existing_keys
             )
 
-            result.append({
-                **parsed,
-                "will_add": will_add,
-            })
+            result.append(
+                {
+                    **parsed,
+                    "will_add": will_add,
+                }
+            )
 
             if will_add:
                 existing_keys.add(key)
@@ -740,23 +607,14 @@ class KnowledgeImporter:
     ) -> KnowledgeItem:
         statement = (
             select(KnowledgeItem)
-            .options(
-                selectinload(
-                    KnowledgeItem.aliases
-                )
-            )
-            .where(
-                KnowledgeItem.id == item_id
-            )
+            .options(selectinload(KnowledgeItem.aliases))
+            .where(KnowledgeItem.id == item_id)
         )
 
         item = self.db.scalar(statement)
 
         if item is None:
-            raise KnowledgeImportError(
-                "Wissenseintrag wurde nicht "
-                f"gefunden: {item_id}"
-            )
+            raise KnowledgeImportError(f"Wissenseintrag wurde nicht gefunden: {item_id}")
 
         return item
 
@@ -764,23 +622,15 @@ class KnowledgeImporter:
     def _normalize_request(
         request: KnowledgeImportRequest,
     ) -> KnowledgeImportRequest:
-        title = str(
-            request.title or ""
-        ).strip()
+        title = str(request.title or "").strip()
 
         if not title:
-            raise KnowledgeImportError(
-                "Ein Titel ist erforderlich."
-            )
+            raise KnowledgeImportError("Ein Titel ist erforderlich.")
 
-        media_type = normalize_media_type(
-            request.media_type
-        )
+        media_type = normalize_media_type(request.media_type)
 
         if not media_type:
-            raise KnowledgeImportError(
-                "Ein Medientyp ist erforderlich."
-            )
+            raise KnowledgeImportError("Ein Medientyp ist erforderlich.")
 
         year = request.year
 
@@ -791,43 +641,22 @@ class KnowledgeImporter:
                 TypeError,
                 ValueError,
             ) as error:
-                raise KnowledgeImportError(
-                    "Das Jahr muss eine Zahl sein."
-                ) from error
+                raise KnowledgeImportError("Das Jahr muss eine Zahl sein.") from error
 
             if year < 1800 or year > 2200:
-                raise KnowledgeImportError(
-                    "Das Jahr liegt außerhalb "
-                    "des erlaubten Bereichs."
-                )
+                raise KnowledgeImportError("Das Jahr liegt außerhalb des erlaubten Bereichs.")
 
-        original_title = (
-            str(request.original_title).strip()
-            if request.original_title
-            else None
-        )
+        original_title = str(request.original_title).strip() if request.original_title else None
 
         return KnowledgeImportRequest(
             title=title,
             media_type=media_type,
             year=year,
             original_title=original_title,
-            aliases=list(
-                request.aliases or []
-            ),
-            external_ids=(
-                normalize_external_ids(
-                    request.external_ids
-                )
-            ),
-            metadata=dict(
-                request.metadata or {}
-            ),
-            source=(
-                str(request.source).strip()
-                if request.source
-                else None
-            ),
+            aliases=list(request.aliases or []),
+            external_ids=(normalize_external_ids(request.external_ids)),
+            metadata=dict(request.metadata or {}),
+            source=(str(request.source).strip() if request.source else None),
         )
 
     @staticmethod
@@ -841,13 +670,9 @@ class KnowledgeImporter:
                 "alias_type": "alternative",
             }
 
-        title = str(
-            alias.get("title") or ""
-        ).strip()
+        title = str(alias.get("title") or "").strip()
 
-        language_value = alias.get(
-            "language"
-        )
+        language_value = alias.get("language")
 
         alias_type_value = alias.get(
             "alias_type",
@@ -859,19 +684,9 @@ class KnowledgeImporter:
 
         return {
             "title": title,
-            "language": (
-                str(language_value)
-                .strip()
-                .lower()
-                if language_value
-                else None
-            ),
+            "language": (str(language_value).strip().lower() if language_value else None),
             "alias_type": (
-                str(alias_type_value)
-                .strip()
-                .lower()
-                if alias_type_value
-                else "alternative"
+                str(alias_type_value).strip().lower() if alias_type_value else "alternative"
             ),
         }
 
@@ -882,13 +697,7 @@ class KnowledgeImporter:
     ) -> tuple[str, str]:
         return (
             normalize_title(title),
-            (
-                str(language)
-                .strip()
-                .lower()
-                if language
-                else ""
-            ),
+            (str(language).strip().lower() if language else ""),
         )
 
     @staticmethod
@@ -899,24 +708,15 @@ class KnowledgeImporter:
         result = dict(metadata)
 
         if source:
-            existing_sources = result.get(
-                "sources"
-            )
+            existing_sources = result.get("sources")
 
             if isinstance(
                 existing_sources,
                 list,
             ):
-                sources = [
-                    str(value)
-                    for value
-                    in existing_sources
-                    if value
-                ]
+                sources = [str(value) for value in existing_sources if value]
             elif existing_sources:
-                sources = [
-                    str(existing_sources)
-                ]
+                sources = [str(existing_sources)]
             else:
                 sources = []
 
@@ -935,23 +735,16 @@ class KnowledgeImporter:
     ) -> dict[str, Any]:
         result = dict(primary)
 
-        for key, incoming_value in (
-            incoming.items()
-        ):
+        for key, incoming_value in incoming.items():
             current_value = result.get(key)
 
-            if (
-                isinstance(current_value, dict)
-                and isinstance(
-                    incoming_value,
-                    dict,
-                )
+            if isinstance(current_value, dict) and isinstance(
+                incoming_value,
+                dict,
             ):
-                result[key] = (
-                    cls._overwrite_dicts(
-                        current_value,
-                        incoming_value,
-                    )
+                result[key] = cls._overwrite_dicts(
+                    current_value,
+                    incoming_value,
                 )
             else:
                 result[key] = incoming_value
@@ -964,17 +757,11 @@ class KnowledgeImporter:
     ) -> dict[str, Any]:
         return {
             "title": request.title,
-            "original_title": (
-                request.original_title
-            ),
-            "media_type": (
-                request.media_type
-            ),
+            "original_title": (request.original_title),
+            "media_type": (request.media_type),
             "year": request.year,
             "aliases": request.aliases,
-            "external_ids": (
-                request.external_ids
-            ),
+            "external_ids": (request.external_ids),
             "metadata": request.metadata,
             "source": request.source,
         }
@@ -983,30 +770,17 @@ class KnowledgeImporter:
     def _has_changes(
         changes: dict[str, Any],
     ) -> bool:
-        return any([
-            bool(changes.get("fields")),
-            bool(
-                changes.get(
-                    "external_ids_changed"
-                )
-            ),
-            bool(
-                changes.get(
-                    "metadata_changed"
-                )
-            ),
-            bool(
-                changes.get(
-                    "aliases_added"
-                )
-            ),
-        ])
+        return any(
+            [
+                bool(changes.get("fields")),
+                bool(changes.get("external_ids_changed")),
+                bool(changes.get("metadata_changed")),
+                bool(changes.get("aliases_added")),
+            ]
+        )
 
     @staticmethod
     def _is_empty(
         value: Any,
     ) -> bool:
-        return (
-            value is None
-            or value == ""
-        )
+        return value is None or value == ""

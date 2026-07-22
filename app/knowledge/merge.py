@@ -1,7 +1,7 @@
 from copy import deepcopy
 from typing import Any
 
-from sqlalchemy import delete, or_, select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session, selectinload
 
 from app.knowledge.constants import (
@@ -55,11 +55,9 @@ class KnowledgeMergeService:
             duplicate=duplicate,
         )
 
-        relation_preview = (
-            self._preview_relations(
-                primary=primary,
-                duplicate=duplicate,
-            )
+        relation_preview = self._preview_relations(
+            primary=primary,
+            duplicate=duplicate,
         )
 
         merged_external_ids = merge_dicts(
@@ -76,26 +74,11 @@ class KnowledgeMergeService:
             "primary": item_to_dict(primary),
             "duplicate": item_to_dict(duplicate),
             "result": {
-                "title": (
-                    primary.title
-                    or duplicate.title
-                ),
-                "original_title": (
-                    primary.original_title
-                    or duplicate.original_title
-                ),
-                "media_type": (
-                    primary.media_type
-                    or duplicate.media_type
-                ),
-                "year": (
-                    primary.year
-                    if primary.year is not None
-                    else duplicate.year
-                ),
-                "external_ids": (
-                    merged_external_ids
-                ),
+                "title": (primary.title or duplicate.title),
+                "original_title": (primary.original_title or duplicate.original_title),
+                "media_type": (primary.media_type or duplicate.media_type),
+                "year": (primary.year if primary.year is not None else duplicate.year),
+                "external_ids": (merged_external_ids),
                 "metadata": merged_metadata,
             },
             "aliases": alias_preview,
@@ -142,20 +125,14 @@ class KnowledgeMergeService:
                 duplicate=duplicate,
             )
 
-            statistics.update(
-                alias_statistics
+            statistics.update(alias_statistics)
+
+            relation_statistics = self._merge_relations(
+                primary=primary,
+                duplicate=duplicate,
             )
 
-            relation_statistics = (
-                self._merge_relations(
-                    primary=primary,
-                    duplicate=duplicate,
-                )
-            )
-
-            statistics.update(
-                relation_statistics
-            )
+            statistics.update(relation_statistics)
 
             self.db.flush()
 
@@ -169,9 +146,7 @@ class KnowledgeMergeService:
             return {
                 "status": "merged",
                 "primary_id": primary.id,
-                "deleted_duplicate_id": (
-                    duplicate_id
-                ),
+                "deleted_duplicate_id": (duplicate_id),
                 "statistics": statistics,
                 "preview": preview,
                 "result": item_to_dict(primary),
@@ -187,47 +162,26 @@ class KnowledgeMergeService:
         primary: KnowledgeItem,
         duplicate: KnowledgeItem,
     ) -> None:
-        if (
-            not primary.original_title
-            and duplicate.original_title
-        ):
-            primary.original_title = (
-                duplicate.original_title
-            )
+        if not primary.original_title and duplicate.original_title:
+            primary.original_title = duplicate.original_title
 
-        if (
-            primary.year is None
-            and duplicate.year is not None
-        ):
+        if primary.year is None and duplicate.year is not None:
             primary.year = duplicate.year
 
-        if (
-            not primary.media_type
-            and duplicate.media_type
-        ):
-            primary.media_type = (
-                duplicate.media_type
-            )
+        if not primary.media_type and duplicate.media_type:
+            primary.media_type = duplicate.media_type
 
         primary.external_ids = encode_json(
             merge_dicts(
-                decode_json(
-                    primary.external_ids
-                ),
-                decode_json(
-                    duplicate.external_ids
-                ),
+                decode_json(primary.external_ids),
+                decode_json(duplicate.external_ids),
             )
         )
 
         primary.metadata_json = encode_json(
             merge_dicts(
-                decode_json(
-                    primary.metadata_json
-                ),
-                decode_json(
-                    duplicate.metadata_json
-                ),
+                decode_json(primary.metadata_json),
+                decode_json(duplicate.metadata_json),
             )
         )
 
@@ -248,9 +202,7 @@ class KnowledgeMergeService:
         added = 0
         skipped = 0
 
-        possible_aliases: list[
-            tuple[str, str | None, str]
-        ] = []
+        possible_aliases: list[tuple[str, str | None, str]] = []
 
         possible_aliases.append(
             (
@@ -278,13 +230,9 @@ class KnowledgeMergeService:
                 )
             )
 
-        primary_title_key = normalize_text(
-            primary.title
-        )
+        primary_title_key = normalize_text(primary.title)
 
-        primary_original_key = normalize_text(
-            primary.original_title
-        )
+        primary_original_key = normalize_text(primary.original_title)
 
         for (
             title,
@@ -296,9 +244,7 @@ class KnowledgeMergeService:
                 language=language,
             )
 
-            normalized_title = normalize_text(
-                title
-            )
+            normalized_title = normalize_text(title)
 
             if not normalized_title:
                 skipped += 1
@@ -318,23 +264,13 @@ class KnowledgeMergeService:
             new_alias = KnowledgeAlias(
                 item_id=primary.id,
                 title=title.strip(),
-                language=(
-                    language.strip().lower()
-                    if language
-                    else None
-                ),
-                alias_type=(
-                    alias_type.strip().lower()
-                    if alias_type
-                    else "alternative"
-                ),
+                language=(language.strip().lower() if language else None),
+                alias_type=(alias_type.strip().lower() if alias_type else "alternative"),
             )
 
             self.db.add(new_alias)
 
-            existing_alias_keys.add(
-                alias_key
-            )
+            existing_alias_keys.add(alias_key)
 
             added += 1
 
@@ -353,69 +289,41 @@ class KnowledgeMergeService:
             select(KnowledgeRelation)
             .where(
                 or_(
-                    KnowledgeRelation.source_id
-                    == duplicate.id,
-                    KnowledgeRelation.target_id
-                    == duplicate.id,
+                    KnowledgeRelation.source_id == duplicate.id,
+                    KnowledgeRelation.target_id == duplicate.id,
                 )
             )
-            .order_by(
-                KnowledgeRelation.id.asc()
-            )
+            .order_by(KnowledgeRelation.id.asc())
         )
 
-        duplicate_relations = list(
-            self.db.scalars(statement).all()
-        )
+        duplicate_relations = list(self.db.scalars(statement).all())
 
         moved = 0
         merged = 0
         removed = 0
 
         for relation in duplicate_relations:
-            new_source_id = (
-                primary.id
-                if relation.source_id
-                == duplicate.id
-                else relation.source_id
-            )
+            new_source_id = primary.id if relation.source_id == duplicate.id else relation.source_id
 
-            new_target_id = (
-                primary.id
-                if relation.target_id
-                == duplicate.id
-                else relation.target_id
-            )
+            new_target_id = primary.id if relation.target_id == duplicate.id else relation.target_id
 
             if new_source_id == new_target_id:
                 self.db.delete(relation)
                 removed += 1
                 continue
 
-            relation_type = (
-                normalize_relation_type(
-                    relation.relation_type
-                )
-            )
+            relation_type = normalize_relation_type(relation.relation_type)
 
             order_type = (
-                normalize_relation_type(
-                    relation.order_type
-                )
-                if relation.order_type
-                else None
+                normalize_relation_type(relation.order_type) if relation.order_type else None
             )
 
-            existing = (
-                self._find_existing_relation(
-                    source_id=new_source_id,
-                    target_id=new_target_id,
-                    relation_type=relation_type,
-                    order_type=order_type,
-                    exclude_relation_id=(
-                        relation.id
-                    ),
-                )
+            existing = self._find_existing_relation(
+                source_id=new_source_id,
+                target_id=new_target_id,
+                relation_type=relation_type,
+                order_type=order_type,
+                exclude_relation_id=(relation.id),
             )
 
             if existing is not None:
@@ -428,18 +336,10 @@ class KnowledgeMergeService:
                 merged += 1
                 continue
 
-            relation.source_id = (
-                new_source_id
-            )
-            relation.target_id = (
-                new_target_id
-            )
-            relation.relation_type = (
-                relation_type
-            )
-            relation.order_type = (
-                order_type
-            )
+            relation.source_id = new_source_id
+            relation.target_id = new_target_id
+            relation.relation_type = relation_type
+            relation.order_type = order_type
 
             moved += 1
 
@@ -458,30 +358,17 @@ class KnowledgeMergeService:
         order_type: str | None,
         exclude_relation_id: int,
     ) -> KnowledgeRelation | None:
-        statement = select(
-            KnowledgeRelation
-        ).where(
-            KnowledgeRelation.id
-            != exclude_relation_id,
-            KnowledgeRelation.source_id
-            == source_id,
-            KnowledgeRelation.target_id
-            == target_id,
-            KnowledgeRelation.relation_type
-            == relation_type,
+        statement = select(KnowledgeRelation).where(
+            KnowledgeRelation.id != exclude_relation_id,
+            KnowledgeRelation.source_id == source_id,
+            KnowledgeRelation.target_id == target_id,
+            KnowledgeRelation.relation_type == relation_type,
         )
 
         if order_type is None:
-            statement = statement.where(
-                KnowledgeRelation.order_type.is_(
-                    None
-                )
-            )
+            statement = statement.where(KnowledgeRelation.order_type.is_(None))
         else:
-            statement = statement.where(
-                KnowledgeRelation.order_type
-                == order_type
-            )
+            statement = statement.where(KnowledgeRelation.order_type == order_type)
 
         return self.db.scalar(statement)
 
@@ -491,16 +378,10 @@ class KnowledgeMergeService:
         target: KnowledgeRelation,
         source: KnowledgeRelation,
     ) -> None:
-        if (
-            target.position is None
-            and source.position is not None
-        ):
+        if target.position is None and source.position is not None:
             target.position = source.position
 
-        elif (
-            target.position is not None
-            and source.position is not None
-        ):
+        elif target.position is not None and source.position is not None:
             target.position = min(
                 target.position,
                 source.position,
@@ -527,9 +408,7 @@ class KnowledgeMergeService:
 
         candidates = []
 
-        values: list[
-            tuple[str, str | None, str]
-        ] = [
+        values: list[tuple[str, str | None, str]] = [
             (
                 duplicate.title,
                 None,
@@ -557,9 +436,7 @@ class KnowledgeMergeService:
 
         primary_titles = {
             normalize_text(primary.title),
-            normalize_text(
-                primary.original_title
-            ),
+            normalize_text(primary.original_title),
         }
 
         for title, language, alias_type in values:
@@ -568,14 +445,11 @@ class KnowledgeMergeService:
                 language=language,
             )
 
-            normalized_title = normalize_text(
-                title
-            )
+            normalized_title = normalize_text(title)
 
             will_add = (
                 bool(normalized_title)
-                and normalized_title
-                not in primary_titles
+                and normalized_title not in primary_titles
                 and key not in existing_keys
             )
 
@@ -593,11 +467,7 @@ class KnowledgeMergeService:
 
         return {
             "candidates": candidates,
-            "add_count": sum(
-                1
-                for candidate in candidates
-                if candidate["will_add"]
-            ),
+            "add_count": sum(1 for candidate in candidates if candidate["will_add"]),
         }
 
     def _preview_relations(
@@ -610,82 +480,44 @@ class KnowledgeMergeService:
             select(KnowledgeRelation)
             .where(
                 or_(
-                    KnowledgeRelation.source_id
-                    == duplicate.id,
-                    KnowledgeRelation.target_id
-                    == duplicate.id,
+                    KnowledgeRelation.source_id == duplicate.id,
+                    KnowledgeRelation.target_id == duplicate.id,
                 )
             )
-            .order_by(
-                KnowledgeRelation.id.asc()
-            )
+            .order_by(KnowledgeRelation.id.asc())
         )
 
-        relations = list(
-            self.db.scalars(statement).all()
-        )
+        relations = list(self.db.scalars(statement).all())
 
         results = []
 
         for relation in relations:
-            new_source_id = (
-                primary.id
-                if relation.source_id
-                == duplicate.id
-                else relation.source_id
-            )
+            new_source_id = primary.id if relation.source_id == duplicate.id else relation.source_id
 
-            new_target_id = (
-                primary.id
-                if relation.target_id
-                == duplicate.id
-                else relation.target_id
-            )
+            new_target_id = primary.id if relation.target_id == duplicate.id else relation.target_id
 
             if new_source_id == new_target_id:
                 action = "remove_self_relation"
             else:
-                existing = (
-                    self._find_existing_relation(
-                        source_id=new_source_id,
-                        target_id=new_target_id,
-                        relation_type=(
-                            normalize_relation_type(
-                                relation.relation_type
-                            )
-                        ),
-                        order_type=(
-                            normalize_relation_type(
-                                relation.order_type
-                            )
-                            if relation.order_type
-                            else None
-                        ),
-                        exclude_relation_id=(
-                            relation.id
-                        ),
-                    )
+                existing = self._find_existing_relation(
+                    source_id=new_source_id,
+                    target_id=new_target_id,
+                    relation_type=(normalize_relation_type(relation.relation_type)),
+                    order_type=(
+                        normalize_relation_type(relation.order_type)
+                        if relation.order_type
+                        else None
+                    ),
+                    exclude_relation_id=(relation.id),
                 )
 
-                action = (
-                    "merge_with_existing"
-                    if existing is not None
-                    else "move_to_primary"
-                )
+                action = "merge_with_existing" if existing is not None else "move_to_primary"
 
             results.append(
                 {
-                    "relation": (
-                        relation_to_dict(
-                            relation
-                        )
-                    ),
-                    "new_source_id": (
-                        new_source_id
-                    ),
-                    "new_target_id": (
-                        new_target_id
-                    ),
+                    "relation": (relation_to_dict(relation)),
+                    "new_source_id": (new_source_id),
+                    "new_target_id": (new_target_id),
                     "action": action,
                 }
             )
@@ -701,23 +533,14 @@ class KnowledgeMergeService:
     ) -> KnowledgeItem:
         statement = (
             select(KnowledgeItem)
-            .options(
-                selectinload(
-                    KnowledgeItem.aliases
-                )
-            )
-            .where(
-                KnowledgeItem.id == item_id
-            )
+            .options(selectinload(KnowledgeItem.aliases))
+            .where(KnowledgeItem.id == item_id)
         )
 
         item = self.db.scalar(statement)
 
         if item is None:
-            raise KnowledgeMergeError(
-                "Wissenseintrag wurde nicht "
-                f"gefunden: {item_id}"
-            )
+            raise KnowledgeMergeError(f"Wissenseintrag wurde nicht gefunden: {item_id}")
 
         return item
 
@@ -728,24 +551,13 @@ class KnowledgeMergeService:
         duplicate: KnowledgeItem,
     ) -> None:
         if primary.id == duplicate.id:
-            raise KnowledgeMergeError(
-                "Haupteintrag und Dublette "
-                "dürfen nicht identisch sein."
-            )
+            raise KnowledgeMergeError("Haupteintrag und Dublette dürfen nicht identisch sein.")
 
-        primary_type = normalize_text(
-            primary.media_type
-        )
+        primary_type = normalize_text(primary.media_type)
 
-        duplicate_type = normalize_text(
-            duplicate.media_type
-        )
+        duplicate_type = normalize_text(duplicate.media_type)
 
-        if (
-            primary_type
-            and duplicate_type
-            and primary_type != duplicate_type
-        ):
+        if primary_type and duplicate_type and primary_type != duplicate_type:
             raise KnowledgeMergeError(
                 "Die Medientypen stimmen "
                 "nicht überein: "
@@ -771,31 +583,16 @@ def normalize_text(
     if value is None:
         return ""
 
-    return " ".join(
-        str(value)
-        .strip()
-        .lower()
-        .replace("-", " ")
-        .replace("_", " ")
-        .split()
-    )
+    return " ".join(str(value).strip().lower().replace("-", " ").replace("_", " ").split())
 
 
 def merge_notes(
     primary: str | None,
     duplicate: str | None,
 ) -> str | None:
-    primary_value = (
-        primary.strip()
-        if primary
-        else ""
-    )
+    primary_value = primary.strip() if primary else ""
 
-    duplicate_value = (
-        duplicate.strip()
-        if duplicate
-        else ""
-    )
+    duplicate_value = duplicate.strip() if duplicate else ""
 
     if not primary_value:
         return duplicate_value or None
@@ -809,11 +606,7 @@ def merge_notes(
     if primary_value in duplicate_value:
         return duplicate_value
 
-    return (
-        primary_value
-        + "\n\n"
-        + duplicate_value
-    )
+    return primary_value + "\n\n" + duplicate_value
 
 
 def merge_dicts(
@@ -831,19 +624,14 @@ def merge_dicts(
 
     for key, duplicate_value in duplicate.items():
         if key not in result:
-            result[key] = deepcopy(
-                duplicate_value
-            )
+            result[key] = deepcopy(duplicate_value)
             continue
 
         primary_value = result[key]
 
-        if (
-            isinstance(primary_value, dict)
-            and isinstance(
-                duplicate_value,
-                dict,
-            )
+        if isinstance(primary_value, dict) and isinstance(
+            duplicate_value,
+            dict,
         ):
             result[key] = merge_dicts(
                 primary_value,
@@ -852,9 +640,7 @@ def merge_dicts(
             continue
 
         if is_empty_value(primary_value):
-            result[key] = deepcopy(
-                duplicate_value
-            )
+            result[key] = deepcopy(duplicate_value)
 
     return result
 

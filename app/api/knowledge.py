@@ -24,7 +24,6 @@ from app.knowledge.service import (
     search_items,
 )
 
-
 router = APIRouter(
     prefix="/knowledge",
     tags=["Knowledge"],
@@ -46,12 +45,8 @@ class KnowledgeItemCreate(BaseModel):
         ge=1,
         le=9999,
     )
-    external_ids: dict[str, Any] = Field(
-        default_factory=dict
-    )
-    metadata: dict[str, Any] = Field(
-        default_factory=dict
-    )
+    external_ids: dict[str, Any] = Field(default_factory=dict)
+    metadata: dict[str, Any] = Field(default_factory=dict)
 
 
 class KnowledgeAliasCreate(BaseModel):
@@ -136,10 +131,7 @@ def search_items_endpoint(
         limit=limit,
     )
 
-    return [
-        item_to_dict(item)
-        for item in items
-    ]
+    return [item_to_dict(item) for item in items]
 
 
 @router.get("/items/{item_id}")
@@ -221,10 +213,7 @@ def create_relation_endpoint(
     if request.source_id == request.target_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                "Quelle und Ziel dürfen nicht "
-                "identisch sein."
-            ),
+            detail=("Quelle und Ziel dürfen nicht identisch sein."),
         )
 
     source = get_item(
@@ -239,10 +228,7 @@ def create_relation_endpoint(
     if source is None or target is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=(
-                "Quell- oder Zieleintrag "
-                "wurde nicht gefunden."
-            ),
+            detail=("Quell- oder Zieleintrag wurde nicht gefunden."),
         )
 
     try:

@@ -2,7 +2,6 @@ from sqlalchemy import inspect, text
 
 from app.database import engine
 
-
 REQUIRED_COLUMNS = {
     "progress": "INTEGER NOT NULL DEFAULT 0",
     "result": "TEXT",
@@ -17,14 +16,9 @@ def migrate() -> None:
     inspector = inspect(engine)
 
     if "jobs" not in inspector.get_table_names():
-        raise RuntimeError(
-            "Die Tabelle 'jobs' wurde nicht gefunden."
-        )
+        raise RuntimeError("Die Tabelle 'jobs' wurde nicht gefunden.")
 
-    existing_columns = {
-        column["name"]
-        for column in inspector.get_columns("jobs")
-    }
+    existing_columns = {column["name"] for column in inspector.get_columns("jobs")}
 
     added_columns: list[str] = []
 
@@ -34,19 +28,12 @@ def migrate() -> None:
                 continue
 
             connection.execute(
-                text(
-                    f"ALTER TABLE jobs "
-                    f"ADD COLUMN {column_name} "
-                    f"{column_definition}"
-                )
+                text(f"ALTER TABLE jobs ADD COLUMN {column_name} {column_definition}")
             )
             added_columns.append(column_name)
 
     if added_columns:
-        print(
-            "Neue Job-Spalten angelegt: "
-            + ", ".join(added_columns)
-        )
+        print("Neue Job-Spalten angelegt: " + ", ".join(added_columns))
     else:
         print("Die Job-Tabelle ist bereits aktuell.")
 

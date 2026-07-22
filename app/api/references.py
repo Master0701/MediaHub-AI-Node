@@ -18,7 +18,6 @@ from app.references.service import (
     ReferenceService,
 )
 
-
 router = APIRouter(
     prefix="/references",
     tags=["references"],
@@ -80,9 +79,7 @@ class ReferenceUpdateRequest(BaseModel):
     quality_profile: str | None = None
     analysis: dict[str, Any] | None = None
     quality: dict[str, Any] | None = None
-    comparison_settings: (
-        dict[str, Any] | None
-    ) = None
+    comparison_settings: dict[str, Any] | None = None
     enabled: bool | None = None
 
 
@@ -91,15 +88,11 @@ def list_references(
     enabled_only: bool = Query(
         default=False,
     ),
-    session: Session = Depends(
-        get_session
-    ),
+    session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     service = ReferenceService(session)
 
-    profiles = service.list(
-        enabled_only=enabled_only
-    )
+    profiles = service.list(enabled_only=enabled_only)
 
     return {
         "count": len(profiles),
@@ -113,9 +106,7 @@ def list_references(
 )
 def create_reference(
     request: ReferenceCreateRequest,
-    session: Session = Depends(
-        get_session
-    ),
+    session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     service = ReferenceService(session)
 
@@ -125,27 +116,13 @@ def create_reference(
         return service.create(
             name=request.name,
             description=request.description,
-            source_file_path=(
-                source.file_path
-                if source
-                else None
-            ),
-            source_file_name=(
-                source.file_name
-                if source
-                else None
-            ),
-            quality_score=(
-                request.quality_score
-            ),
-            quality_profile=(
-                request.quality_profile
-            ),
+            source_file_path=(source.file_path if source else None),
+            source_file_name=(source.file_name if source else None),
+            quality_score=(request.quality_score),
+            quality_profile=(request.quality_profile),
             analysis=request.analysis,
             quality=request.quality,
-            comparison_settings=(
-                request.comparison_settings
-            ),
+            comparison_settings=(request.comparison_settings),
             enabled=request.enabled,
         )
 
@@ -158,19 +135,14 @@ def create_reference(
     except ReferenceProfileNameExistsError:
         raise HTTPException(
             status_code=409,
-            detail=(
-                "Ein Referenzprofil mit diesem "
-                "Namen existiert bereits."
-            ),
+            detail=("Ein Referenzprofil mit diesem Namen existiert bereits."),
         )
 
 
 @router.get("/{profile_id}")
 def get_reference(
     profile_id: int,
-    session: Session = Depends(
-        get_session
-    ),
+    session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     service = ReferenceService(session)
 
@@ -180,10 +152,7 @@ def get_reference(
     except ReferenceProfileNotFoundError:
         raise HTTPException(
             status_code=404,
-            detail=(
-                "Referenzprofil wurde "
-                "nicht gefunden."
-            ),
+            detail=("Referenzprofil wurde nicht gefunden."),
         )
 
 
@@ -191,17 +160,13 @@ def get_reference(
 def update_reference(
     profile_id: int,
     request: ReferenceUpdateRequest,
-    session: Session = Depends(
-        get_session
-    ),
+    session: Session = Depends(get_session),
 ) -> dict[str, Any]:
     service = ReferenceService(session)
 
     source = request.source
 
-    update_data = request.model_dump(
-        exclude_unset=True
-    )
+    update_data = request.model_dump(exclude_unset=True)
 
     arguments: dict[str, Any] = {}
 
@@ -219,16 +184,8 @@ def update_reference(
             arguments[field] = update_data[field]
 
     if "source" in update_data:
-        arguments["source_file_path"] = (
-            source.file_path
-            if source
-            else None
-        )
-        arguments["source_file_name"] = (
-            source.file_name
-            if source
-            else None
-        )
+        arguments["source_file_path"] = source.file_path if source else None
+        arguments["source_file_name"] = source.file_name if source else None
 
     try:
         return service.update(
@@ -245,19 +202,13 @@ def update_reference(
     except ReferenceProfileNotFoundError:
         raise HTTPException(
             status_code=404,
-            detail=(
-                "Referenzprofil wurde "
-                "nicht gefunden."
-            ),
+            detail=("Referenzprofil wurde nicht gefunden."),
         )
 
     except ReferenceProfileNameExistsError:
         raise HTTPException(
             status_code=409,
-            detail=(
-                "Ein Referenzprofil mit diesem "
-                "Namen existiert bereits."
-            ),
+            detail=("Ein Referenzprofil mit diesem Namen existiert bereits."),
         )
 
 
@@ -267,9 +218,7 @@ def update_reference(
 )
 def delete_reference(
     profile_id: int,
-    session: Session = Depends(
-        get_session
-    ),
+    session: Session = Depends(get_session),
 ) -> Response:
     service = ReferenceService(session)
 
@@ -279,12 +228,7 @@ def delete_reference(
     except ReferenceProfileNotFoundError:
         raise HTTPException(
             status_code=404,
-            detail=(
-                "Referenzprofil wurde "
-                "nicht gefunden."
-            ),
+            detail=("Referenzprofil wurde nicht gefunden."),
         )
 
-    return Response(
-        status_code=status.HTTP_204_NO_CONTENT
-    )
+    return Response(status_code=status.HTTP_204_NO_CONTENT)

@@ -1,7 +1,6 @@
 from copy import deepcopy
 from typing import Any
 
-
 DEFAULT_PROFILE_NAME = "balanced"
 
 
@@ -9,10 +8,7 @@ QUALITY_PROFILES: dict[str, dict[str, Any]] = {
     "permissive": {
         "name": "permissive",
         "label": "Großzügig",
-        "description": (
-            "Geeignet für ältere Aufnahmen, "
-            "seltene Inhalte und kleine Dateien."
-        ),
+        "description": ("Geeignet für ältere Aufnahmen, seltene Inhalte und kleine Dateien."),
         "thresholds": {
             "excellent": 85,
             "very_good": 70,
@@ -29,10 +25,7 @@ QUALITY_PROFILES: dict[str, dict[str, Any]] = {
     "balanced": {
         "name": "balanced",
         "label": "Ausgewogen",
-        "description": (
-            "Standardprofil für Filme, Serien "
-            "und gewöhnliche Medienbibliotheken."
-        ),
+        "description": ("Standardprofil für Filme, Serien und gewöhnliche Medienbibliotheken."),
         "thresholds": {
             "excellent": 90,
             "very_good": 75,
@@ -49,10 +42,7 @@ QUALITY_PROFILES: dict[str, dict[str, Any]] = {
     "archive": {
         "name": "archive",
         "label": "Archivqualität",
-        "description": (
-            "Strenge Bewertung für hochwertige "
-            "Archiv- und Hauptfassungen."
-        ),
+        "description": ("Strenge Bewertung für hochwertige Archiv- und Hauptfassungen."),
         "thresholds": {
             "excellent": 95,
             "very_good": 85,
@@ -72,25 +62,15 @@ QUALITY_PROFILES: dict[str, dict[str, Any]] = {
 def get_quality_profile(
     profile_name: str | None,
 ) -> dict[str, Any]:
-    normalized_name = str(
-        profile_name or DEFAULT_PROFILE_NAME
-    ).strip().lower()
+    normalized_name = str(profile_name or DEFAULT_PROFILE_NAME).strip().lower()
 
-    profile = QUALITY_PROFILES.get(
-        normalized_name
-    )
+    profile = QUALITY_PROFILES.get(normalized_name)
 
     if profile is None:
-        profile = QUALITY_PROFILES[
-            DEFAULT_PROFILE_NAME
-        ]
+        profile = QUALITY_PROFILES[DEFAULT_PROFILE_NAME]
 
     return deepcopy(profile)
 
 
-def list_quality_profiles(
-) -> list[dict[str, Any]]:
-    return [
-        deepcopy(profile)
-        for profile in QUALITY_PROFILES.values()
-    ]
+def list_quality_profiles() -> list[dict[str, Any]]:
+    return [deepcopy(profile) for profile in QUALITY_PROFILES.values()]

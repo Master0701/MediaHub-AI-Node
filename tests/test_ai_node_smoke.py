@@ -4,7 +4,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 if str(PROJECT_ROOT) not in sys.path:
@@ -15,7 +14,6 @@ from fastapi.testclient import TestClient
 from app.database import SessionLocal
 from app.knowledge.graph import KnowledgeGraphService
 from app.main import app
-
 
 client = TestClient(app)
 
@@ -78,11 +76,7 @@ def test_openapi_routes() -> bool:
     return print_result(
         "Knowledge-Import-Endpunkte",
         not missing,
-        (
-            "Alle 3 Endpunkte vorhanden."
-            if not missing
-            else f"Fehlend: {missing}"
-        ),
+        ("Alle 3 Endpunkte vorhanden." if not missing else f"Fehlend: {missing}"),
     )
 
 
@@ -120,7 +114,8 @@ def test_item_import() -> bool:
     item_id = data.get("item_id")
 
     valid = (
-        status in {
+        status
+        in {
             "would_update",
             "unchanged",
         }
@@ -145,10 +140,7 @@ def test_relation_import() -> bool:
         "relation_type": "sequel-of",
         "order_type": "release-order",
         "position": 2,
-        "notes": (
-            "Creed II setzt die Handlung "
-            "von Creed fort."
-        ),
+        "notes": ("Creed II setzt die Handlung von Creed fort."),
         "dry_run": True,
     }
 
@@ -168,18 +160,12 @@ def test_relation_import() -> bool:
     status = data.get("status")
     relation_id = data.get("relation_id")
 
-    valid = (
-        status == "unchanged"
-        and relation_id == 2
-    )
+    valid = status == "unchanged" and relation_id == 2
 
     return print_result(
         "Beziehungsimport",
         valid,
-        (
-            f"Status: {status}, "
-            f"Beziehung: {relation_id}"
-        ),
+        (f"Status: {status}, Beziehung: {relation_id}"),
     )
 
 
@@ -202,18 +188,12 @@ def test_graph_integrity() -> bool:
         -1,
     )
 
-    valid = (
-        invalid_count == 0
-        and duplicate_count == 0
-    )
+    valid = invalid_count == 0 and duplicate_count == 0
 
     return print_result(
         "Graph-Integrität",
         valid,
-        (
-            f"Ungültig: {invalid_count}, "
-            f"Dubletten: {duplicate_count}"
-        ),
+        (f"Ungültig: {invalid_count}, Dubletten: {duplicate_count}"),
     )
 
 
