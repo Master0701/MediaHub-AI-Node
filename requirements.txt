@@ -29,3 +29,4 @@ watchfiles==1.2.0
 websockets==16.1.1
 wheel==0.47.0
 opencv-python-headless
+ImageHash
