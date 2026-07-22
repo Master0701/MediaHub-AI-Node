@@ -1,0 +1,48 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets/
+credentials/
+# Databases, runtime and cache
+*.db
+*.sqlite
+*.sqlite3
+data/
+cache/
+logs/
+runtime/
+jobs/
+backups/
+models/
+# Build and release
+build/
+dist/
+release/
+*.egg-info/
+docs/generated/*.pdf
+docs/generated/*.html
+!docs/generated/.gitkeep
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+# Local environment snapshot
+requirements-installed.txt
