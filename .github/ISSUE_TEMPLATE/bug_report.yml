@@ -1,0 +1,35 @@
+name: Fehlerbericht
+description: Einen reproduzierbaren Fehler melden
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: Danke für den Fehlerbericht. Keine Tokens, Passwörter oder privaten Daten einfügen.
+  - type: textarea
+    id: description
+    attributes:
+      label: Beschreibung
+      description: Was ist passiert?
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Schritte zum Nachstellen
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version oder Commit
+  - type: input
+    id: system
+    attributes:
+      label: System
+      placeholder: Raspberry Pi 5, Raspberry Pi OS 64-Bit, Python 3.13
+  - type: textarea
+    id: logs
+    attributes:
+      label: Bereinigte Logs
+      description: Geheimnisse und private Daten entfernen.

@@ -1,0 +1,9 @@
+# Dieser Startstand muss beim Übernehmen des geprüften Pi-Projekts
+# mit `python -m pip freeze` beziehungsweise den tatsächlich benötigten
+# direkten Abhängigkeiten abgeglichen werden.
+fastapi
+uvicorn[standard]
+sqlalchemy
+pydantic
+psutil
+httpx
