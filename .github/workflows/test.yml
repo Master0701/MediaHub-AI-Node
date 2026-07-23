@@ -12,6 +12,10 @@ permissions:
 jobs:
   test:
     runs-on: ubuntu-latest
+
+    env:
+      MEDIAHUB_BASE_DIR: ${{ runner.temp }}/mediahub
+
     strategy:
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
@@ -30,6 +34,14 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
+
+      - name: Testverzeichnisse anlegen
+        run: |
+          mkdir -p "$MEDIAHUB_BASE_DIR/database"
+          mkdir -p "$MEDIAHUB_BASE_DIR/cache"
+          mkdir -p "$MEDIAHUB_BASE_DIR/jobs"
+          mkdir -p "$MEDIAHUB_BASE_DIR/logs"
+          mkdir -p "$MEDIAHUB_BASE_DIR/models"
 
       - name: Syntax prüfen
         run: python -m compileall app tests

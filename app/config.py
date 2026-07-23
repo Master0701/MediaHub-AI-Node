@@ -1,8 +1,9 @@
+import os
 from pathlib import Path
 
 from app.version import APP_NAME, APP_VERSION  # noqa: F401
 
-BASE_DIR = Path("/opt/mediahub")
+BASE_DIR = Path(os.getenv("MEDIAHUB_BASE_DIR", "/opt/mediahub"))
 
 HOST = "0.0.0.0"
 PORT = 8765
