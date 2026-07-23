@@ -7,11 +7,11 @@ from app.jobs.media_analyze import MediaAnalyzeHandler
 from app.jobs.provider_execute import (
     ProviderExecuteHandler,
 )
-from app.jobs.reference_create import (
-    ReferenceCreateHandler,
-)
 from app.jobs.reference_compare import (
     ReferenceCompareHandler,
+)
+from app.jobs.reference_create import (
+    ReferenceCreateHandler,
 )
 from app.jobs.system_test import SystemTestHandler
 

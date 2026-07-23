@@ -1,5 +1,5 @@
 import json
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from sqlalchemy import delete, select
@@ -9,7 +9,7 @@ from app.cache.models import CacheEntry
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def encode_json(value: Any) -> str:
@@ -48,7 +48,7 @@ def is_expired(entry: CacheEntry) -> bool:
 
     if expires.tzinfo is None:
         expires = expires.replace(
-            tzinfo=timezone.utc
+            tzinfo=UTC
         )
 
     return expires <= utc_now()

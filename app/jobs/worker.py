@@ -15,7 +15,6 @@ from app.services.job_service import (
     update_job_progress,
 )
 
-
 logger = logging.getLogger("mediahub.jobs")
 
 _stop_event = threading.Event()
