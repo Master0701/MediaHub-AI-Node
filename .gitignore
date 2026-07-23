@@ -25,10 +25,10 @@ credentials/
 *.sqlite
 *.sqlite3
 data/
-cache/
+/cache/
 logs/
 runtime/
-jobs/
+/jobs/
 backups/
 models/
 # Build and release
