@@ -14,7 +14,7 @@ jobs:
     runs-on: ubuntu-latest
 
     env:
-      MEDIAHUB_BASE_DIR: ${{ runner.temp }}/mediahub
+      MEDIAHUB_BASE_DIR: /tmp/mediahub-ai-node
 
     strategy:
       matrix:
