@@ -14,6 +14,17 @@ Alle wesentlichen Änderungen an MediaHub-AI-Node werden in dieser Datei dokumen
 - `health_check.sh`
 - Sicherheits- und Beitragsrichtlinien
 
+## [0.7.1] - 2026-07-24
+
+### Geändert
+
+- Release-Paketbau korrigiert.
+- GitHub-Releases erhalten vollständige Release-Beschreibungen.
+- Installation über Release-ZIP und direkte Git-Installation dokumentiert.
+- Versionsangaben vereinheitlicht.
+- Gemeinsamen MediaHub-Repository-Standard ergänzt.
+- Temporäre Release-Notizen werden nach erfolgreichem Release entfernt.
+
 ## [0.1.0] - 2026-07-22
 
 ### Funktionsfähiger Raspberry-Pi-Teststand
