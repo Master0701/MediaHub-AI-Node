@@ -6,6 +6,7 @@ from app.analyzer.base import (
     AnalyzerResult,
     BaseAnalyzer,
 )
+from app.knowledge.types import EDITION_PATTERNS as KNOWLEDGE_EDITION_PATTERNS
 
 
 class FilenameAnalyzer(BaseAnalyzer):
@@ -25,16 +26,7 @@ class FilenameAnalyzer(BaseAnalyzer):
         "media_type",
     ]
 
-    EDITION_PATTERNS = {
-        "uncut": r"\buncut\b",
-        "extended": r"\bextended(?:[ ._-]*cut)?\b",
-        "directors_cut": (r"\bdirector(?:'s|s)?[ ._-]*cut\b"),
-        "theatrical_cut": (r"\btheatrical(?:[ ._-]*cut)?\b"),
-        "remastered": r"\bremaster(?:ed)?\b",
-        "special_edition": (r"\bspecial[ ._-]*edition\b"),
-        "anniversary_edition": (r"\banniversary[ ._-]*edition\b"),
-        "ultimate_edition": (r"\bultimate[ ._-]*edition\b"),
-    }
+    EDITION_PATTERNS = KNOWLEDGE_EDITION_PATTERNS
 
     TECHNICAL_PATTERNS = [
         r"\b2160p\b",

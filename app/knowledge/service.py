@@ -12,6 +12,7 @@ from app.knowledge.models import (
     KnowledgeItem,
     KnowledgeRelation,
 )
+from app.knowledge.types import normalize_media_type
 
 
 def encode_json(value: dict[str, Any] | None) -> str:
@@ -47,7 +48,7 @@ def create_item(
     metadata: dict[str, Any] | None = None,
 ) -> KnowledgeItem:
     item = KnowledgeItem(
-        media_type=media_type.strip().lower(),
+        media_type=normalize_media_type(media_type),
         title=title.strip(),
         original_title=(original_title.strip() if original_title else None),
         year=year,
@@ -78,7 +79,7 @@ def search_items(
     statement = select(KnowledgeItem)
 
     if media_type:
-        statement = statement.where(KnowledgeItem.media_type == media_type.strip().lower())
+        statement = statement.where(KnowledgeItem.media_type == normalize_media_type(media_type))
 
     if query:
         search_value = f"%{query.strip()}%"

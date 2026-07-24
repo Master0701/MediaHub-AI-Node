@@ -12,6 +12,7 @@ from app.knowledge.models import (
     KnowledgeItem,
 )
 from app.knowledge.service import decode_json
+from app.knowledge.types import normalize_media_type
 
 
 @dataclass(slots=True)
@@ -496,35 +497,6 @@ class KnowledgeMatcher:
 
         return {title for title in titles if title}
 
-
-def normalize_media_type(
-    value: str | None,
-) -> str:
-    if not value:
-        return ""
-
-    normalized = str(value).strip().lower().replace("-", "_").replace(" ", "_")
-
-    aliases = {
-        "movie": "movie",
-        "film": "movie",
-        "movies": "movie",
-        "serie": "series",
-        "series": "series",
-        "tv": "series",
-        "tv_series": "series",
-        "show": "series",
-        "episode": "episode",
-        "season": "season",
-        "audiobook": "audiobook",
-        "hörbuch": "audiobook",
-        "audio_book": "audiobook",
-    }
-
-    return aliases.get(
-        normalized,
-        normalized,
-    )
 
 
 def normalize_external_ids(
