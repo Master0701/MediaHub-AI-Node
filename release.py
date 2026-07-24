@@ -1,361 +1,257 @@
 #!/usr/bin/env python3
-"""Release-Assistent für MediaHub-AI-Node.
+"""Prüft MediaHub-AI-Node und erstellt Release-ZIP und SHA-256-Datei.
 
-Ablauf:
-1. Repository und Werkzeuge prüfen
-2. Version aus pyproject.toml lesen
-3. Tests und Sicherheitsprüfungen ausführen
-4. Änderungen committen und nach main pushen
-5. Annotierten Versions-Tag erstellen und pushen
-6. GitHub Actions erstellt daraus das Release-Paket
-
-Aufruf:
-    python release.py
-    python release.py --message "MediaHub-AI-Node v0.1.0"
-    python release.py --dry-run
+Dieses Skript führt keine Git-Commits, Pushes oder Tag-Erstellung aus.
+Es ist für den lokalen Aufruf und für GitHub Actions vorgesehen.
 """
 
 from __future__ import annotations
 
-import argparse
-import re
+import hashlib
 import shutil
 import subprocess
 import sys
+import zipfile
 from pathlib import Path
 
-PROJECT_NAME = "MediaHub-AI-Node"
-DEFAULT_BRANCH = "main"
-DEFAULT_REMOTE = "origin"
-
 ROOT = Path(__file__).resolve().parent
-PYPROJECT = ROOT / "pyproject.toml"
+RELEASE_DIR = ROOT / "release"
+PROJECT_NAME = "MediaHub-AI-Node"
 
-SECRET_PATTERN = re.compile(
-    r"""(?ix)
-    (api[_-]?key|access[_-]?token|secret|password|passwd)\s*
-    [:=]\s*
-    ["']?([A-Za-z0-9_\-./+=]{8,})
-    """
+INCLUDED = (
+    "app",
+    "docs",
+    "examples",
+    "licenses",
+    "migrations",
+    "scripts",
+    ".env.example",
+    "CHANGELOG.md",
+    "CODE_OF_CONDUCT.md",
+    "CONTRIBUTING.md",
+    "LICENSE",
+    "README.md",
+    "REPOSITORY_SETUP.md",
+    "SECURITY.md",
+    "THIRD_PARTY_LICENSES.md",
+    "init_database.py",
+    "pyproject.toml",
+    "requirements.txt",
 )
 
-IGNORED_SECRET_PATHS = {
-    ".git",
-    ".venv",
-    "venv",
-    "__pycache__",
-    ".pytest_cache",
-    ".ruff_cache",
-    "node_modules",
+EXCLUDED_DIRS = {
+    ".git", ".github", ".venv", "venv", "env", "__pycache__",
+    ".pytest_cache", ".mypy_cache", ".ruff_cache", "build", "dist",
+    "release", "data", "cache", "logs", "runtime", "jobs", "backups",
+    "models", "node_modules",
+}
+
+EXCLUDED_SUFFIXES = {
+    ".pyc", ".pyo", ".db", ".sqlite", ".sqlite3", ".key", ".pem",
 }
 
 
 class ReleaseError(RuntimeError):
-    """Kontrollierter Abbruch des Release-Ablaufs."""
+    pass
 
 
-def run(
-    *command: str,
-    check: bool = True,
-    capture: bool = False,
-    dry_run: bool = False,
-) -> subprocess.CompletedProcess[str]:
-    printable = " ".join(command)
-    print(f"\n> {printable}")
-
-    if dry_run:
-        return subprocess.CompletedProcess(command, 0, "", "")
-
-    result = subprocess.run(
-        command,
-        cwd=ROOT,
-        text=True,
-        capture_output=capture,
-        check=False,
-    )
-
-    if capture and result.stdout:
-        print(result.stdout.rstrip())
-    if capture and result.stderr:
-        print(result.stderr.rstrip(), file=sys.stderr)
-
-    if check and result.returncode != 0:
-        raise ReleaseError(
-            f"Befehl fehlgeschlagen ({result.returncode}): {printable}"
-        )
-    return result
-
-
-def output(*command: str) -> str:
-    result = subprocess.run(
-        command,
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
+def run_check(command: list[str], label: str) -> None:
+    print(f"\n== {label} ==")
+    print("> " + " ".join(command))
+    result = subprocess.run(command, cwd=ROOT, check=False)
     if result.returncode != 0:
         raise ReleaseError(
-            result.stderr.strip() or f"Befehl fehlgeschlagen: {' '.join(command)}"
+            f"{label} fehlgeschlagen (Exit-Code {result.returncode})."
         )
-    return result.stdout.strip()
-
-
-def require_tool(name: str) -> None:
-    if shutil.which(name) is None:
-        raise ReleaseError(f"Benötigtes Werkzeug nicht gefunden: {name}")
 
 
 def read_version() -> str:
-    if not PYPROJECT.is_file():
-        raise ReleaseError("pyproject.toml wurde nicht gefunden.")
+    version_file = ROOT / "app" / "version.py"
+    if not version_file.is_file():
+        raise ReleaseError("app/version.py wurde nicht gefunden.")
 
-    text = PYPROJECT.read_text(encoding="utf-8")
-    match = re.search(
-        r'(?ms)^\[project\].*?^version\s*=\s*"([^"]+)"',
-        text,
-    )
-    if not match:
-        raise ReleaseError(
-            'Keine Projektversion unter [project] in pyproject.toml gefunden.'
-        )
-
-    version = match.group(1).strip()
-    if not re.fullmatch(r"\d+\.\d+\.\d+(?:[A-Za-z0-9._-]+)?", version):
-        raise ReleaseError(f"Ungültiges Versionsformat: {version}")
-
-    return version
-
-
-def check_repository() -> None:
-    if not (ROOT / ".git").exists():
-        raise ReleaseError(f"{ROOT} ist kein Git-Repository.")
-
-    branch = output("git", "branch", "--show-current")
-    if branch != DEFAULT_BRANCH:
-        raise ReleaseError(
-            f"Aktueller Branch ist '{branch}'. Release nur von '{DEFAULT_BRANCH}'."
-        )
-
-    remote_url = output("git", "remote", "get-url", DEFAULT_REMOTE)
-    if "MediaHub-AI-Node" not in remote_url:
-        raise ReleaseError(
-            f"Unerwartetes Git-Remote '{DEFAULT_REMOTE}': {remote_url}"
-        )
-
-    run("git", "fetch", DEFAULT_REMOTE, DEFAULT_BRANCH)
-
-    local_head = output("git", "rev-parse", "HEAD")
-    remote_head = output(
-        "git", "rev-parse", f"{DEFAULT_REMOTE}/{DEFAULT_BRANCH}"
-    )
-    merge_base = output(
-        "git", "merge-base", "HEAD", f"{DEFAULT_REMOTE}/{DEFAULT_BRANCH}"
+    namespace: dict[str, object] = {}
+    exec(
+        compile(
+            version_file.read_text(encoding="utf-8"),
+            str(version_file),
+            "exec",
+        ),
+        {},
+        namespace,
     )
 
-    if merge_base != remote_head and local_head != remote_head:
+    version = namespace.get("APP_VERSION")
+    if not isinstance(version, str) or not version.strip():
+        raise ReleaseError("APP_VERSION fehlt in app/version.py.")
+    return version.strip()
+
+
+def check_required_files() -> None:
+    required = (
+        "app",
+        "licenses",
+        "LICENSE",
+        "README.md",
+        "SECURITY.md",
+        "THIRD_PARTY_LICENSES.md",
+        "pyproject.toml",
+        "requirements.txt",
+    )
+    missing = [name for name in required if not (ROOT / name).exists()]
+    if missing:
         raise ReleaseError(
-            "Lokaler Stand und GitHub-Stand sind auseinander gelaufen. "
-            "Bitte zuerst sauber synchronisieren."
+            "Erforderliche Dateien fehlen: " + ", ".join(missing)
         )
 
 
-def scan_for_secrets() -> None:
-    print("\nPrüfe versionierte Dateien auf mögliche Zugangsdaten ...")
-    files = output("git", "ls-files").splitlines()
-    findings: list[str] = []
+def should_include(path: Path) -> bool:
+    relative = path.relative_to(ROOT)
+    if any(part in EXCLUDED_DIRS for part in relative.parts):
+        return False
+    if path.suffix.lower() in EXCLUDED_SUFFIXES:
+        return False
+    if path.name.startswith(".env") and path.name != ".env.example":
+        return False
+    return path.is_file()
 
-    for relative in files:
-        path = ROOT / relative
-        if any(part in IGNORED_SECRET_PATHS for part in path.parts):
-            continue
-        if not path.is_file():
-            continue
-        try:
-            if path.stat().st_size > 2_000_000:
-                continue
-            text = path.read_text(encoding="utf-8")
-        except (UnicodeDecodeError, OSError):
+
+def collect_files() -> list[Path]:
+    files: set[Path] = set()
+
+    for name in INCLUDED:
+        item = ROOT / name
+        if not item.exists():
             continue
 
-        for line_number, line in enumerate(text.splitlines(), start=1):
-            if SECRET_PATTERN.search(line):
-                lowered = line.lower()
-                if any(
-                    marker in lowered
-                    for marker in (
-                        "example",
-                        "placeholder",
-                        "change-me",
-                        "your_",
-                        "test",
-                        "dummy",
-                    )
-                ):
-                    continue
-                findings.append(f"{relative}:{line_number}: {line.strip()[:160]}")
+        if item.is_file():
+            if should_include(item):
+                files.add(item)
+        else:
+            for path in item.rglob("*"):
+                if should_include(path):
+                    files.add(path)
 
-    if findings:
-        print("\nMögliche Zugangsdaten gefunden:")
-        for finding in findings:
-            print(f"  - {finding}")
-        raise ReleaseError(
-            "Release aus Sicherheitsgründen abgebrochen. Fundstellen prüfen."
-        )
+    if not files:
+        raise ReleaseError("Keine Dateien für das Release gefunden.")
 
-    print("Keine offensichtlichen Zugangsdaten gefunden.")
+    return sorted(files, key=lambda p: p.as_posix().lower())
 
 
-def tag_exists(tag: str) -> bool:
-    result = subprocess.run(
-        ["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{tag}"],
-        cwd=ROOT,
-        check=False,
+def create_zip(version: str, files: list[Path]) -> Path:
+    RELEASE_DIR.mkdir(parents=True, exist_ok=True)
+    archive_path = RELEASE_DIR / f"{PROJECT_NAME}_v{version}.zip"
+    package_root = f"{PROJECT_NAME}_v{version}"
+
+    if archive_path.exists():
+        archive_path.unlink()
+
+    print("\n== Release-Paket erstellen ==")
+    print(f"Zieldatei: {archive_path.relative_to(ROOT)}")
+    print(f"Dateien: {len(files)}")
+
+    with zipfile.ZipFile(
+        archive_path,
+        "w",
+        compression=zipfile.ZIP_DEFLATED,
+        compresslevel=9,
+    ) as archive:
+        for source in files:
+            relative = source.relative_to(ROOT)
+            archive.write(
+                source,
+                (Path(package_root) / relative).as_posix(),
+            )
+
+    if not archive_path.is_file() or archive_path.stat().st_size == 0:
+        raise ReleaseError("ZIP-Datei wurde nicht korrekt erstellt.")
+
+    return archive_path
+
+
+def create_sha256(archive_path: Path) -> Path:
+    digest = hashlib.sha256()
+    with archive_path.open("rb") as handle:
+        for block in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(block)
+
+    checksum_path = archive_path.with_suffix(".zip.sha256")
+    checksum_path.write_text(
+        f"{digest.hexdigest()}  {archive_path.name}\n",
+        encoding="utf-8",
+        newline="\n",
     )
-    if result.returncode == 0:
-        return True
-
-    result = subprocess.run(
-        ["git", "ls-remote", "--exit-code", "--tags", DEFAULT_REMOTE, tag],
-        cwd=ROOT,
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    return result.returncode == 0
+    return checksum_path
 
 
-def run_checks(dry_run: bool) -> None:
-    run(sys.executable, "-m", "compileall", "-q", "app", "tests", dry_run=dry_run)
-    run(sys.executable, "-m", "pytest", dry_run=dry_run)
+def verify_zip(archive_path: Path) -> None:
+    print("\n== ZIP-Archiv prüfen ==")
+    with zipfile.ZipFile(archive_path, "r") as archive:
+        broken = archive.testzip()
+        names = archive.namelist()
 
-    if shutil.which("ruff"):
-        run("ruff", "check", ".", dry_run=dry_run)
-    else:
-        print("\nHinweis: ruff ist nicht installiert; Ruff-Prüfung wird übersprungen.")
+    if broken:
+        raise ReleaseError(f"Beschädigter ZIP-Eintrag: {broken}")
+    if not any(name.endswith("/app/main.py") for name in names):
+        raise ReleaseError("app/main.py fehlt im ZIP.")
+    if not any(name.endswith("/LICENSE") for name in names):
+        raise ReleaseError("LICENSE fehlt im ZIP.")
 
-
-def confirm_release(version: str, tag: str, message: str) -> None:
-    print("\n" + "=" * 64)
-    print(f"Projekt : {PROJECT_NAME}")
-    print(f"Version : {version}")
-    print(f"Tag     : {tag}")
-    print(f"Branch  : {DEFAULT_BRANCH}")
-    print(f"Commit  : {message}")
-    print("=" * 64)
-
-    answer = input(
-        '\nZum Veröffentlichen exakt "RELEASE" eingeben: '
-    ).strip()
-    if answer != "RELEASE":
-        raise ReleaseError("Release vom Benutzer abgebrochen.")
-
-
-def create_release(
-    version: str,
-    message: str,
-    skip_tests: bool,
-    yes: bool,
-    dry_run: bool,
-) -> None:
-    tag = f"v{version}"
-
-    require_tool("git")
-    check_repository()
-
-    if tag_exists(tag):
-        raise ReleaseError(
-            f"Der Tag {tag} existiert bereits lokal oder auf GitHub."
-        )
-
-    if not skip_tests:
-        run_checks(dry_run=dry_run)
-
-    scan_for_secrets()
-
-    status = output("git", "status", "--porcelain")
-    if not status:
-        print("\nKeine ungespeicherten Änderungen vorhanden.")
-        print("Es wird der aktuelle Commit getaggt.")
-    else:
-        print("\nFolgende Änderungen werden veröffentlicht:")
-        print(status)
-
-    if not yes and not dry_run:
-        confirm_release(version, tag, message)
-
-    if status:
-        run("git", "add", "--all", dry_run=dry_run)
-        run("git", "commit", "-m", message, dry_run=dry_run)
-
-    run("git", "push", DEFAULT_REMOTE, DEFAULT_BRANCH, dry_run=dry_run)
-    run(
-        "git",
-        "tag",
-        "-a",
-        tag,
-        "-m",
-        f"{PROJECT_NAME} {tag}",
-        dry_run=dry_run,
-    )
-    run("git", "push", DEFAULT_REMOTE, tag, dry_run=dry_run)
-
-    print("\n" + "=" * 64)
-    if dry_run:
-        print("Trockenlauf erfolgreich. Es wurde nichts verändert.")
-    else:
-        print(f"Release {tag} wurde angestoßen.")
-        print("GitHub Actions erstellt nun Release-Paket und SHA-256-Prüfsumme.")
-    print("=" * 64)
-
-
-def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description=f"{PROJECT_NAME} prüfen, committen, taggen und veröffentlichen."
-    )
-    parser.add_argument(
-        "--message",
-        help="Eigene Git-Commit-Nachricht.",
-    )
-    parser.add_argument(
-        "--skip-tests",
-        action="store_true",
-        help="Tests überspringen (nicht empfohlen).",
-    )
-    parser.add_argument(
-        "--yes",
-        action="store_true",
-        help="Bestätigungsabfrage überspringen.",
-    )
-    parser.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="Ablauf prüfen, ohne Git zu verändern.",
-    )
-    return parser.parse_args()
+    print("ZIP-Archiv ist vollständig und lesbar.")
 
 
 def main() -> int:
-    args = parse_args()
-
     try:
+        print("MediaHub-AI-Node – Release-Prüfung und Paketbau")
+        print(f"Projektordner: {ROOT}")
+
         version = read_version()
-        message = args.message or f"Release {PROJECT_NAME} v{version}"
-        create_release(
-            version=version,
-            message=message,
-            skip_tests=args.skip_tests,
-            yes=args.yes,
-            dry_run=args.dry_run,
+        print(f"Version: {version}")
+
+        check_required_files()
+
+        run_check(
+            [sys.executable, "-m", "compileall", "-q", "app", "tests"],
+            "Python-Syntax prüfen",
         )
-    except KeyboardInterrupt:
-        print("\nAbgebrochen.", file=sys.stderr)
-        return 130
+        run_check(
+            [sys.executable, "-m", "pytest"],
+            "Tests ausführen",
+        )
+        run_check(
+            [sys.executable, "-m", "ruff", "check", "."],
+            "Ruff-Codeprüfung",
+        )
+
+        if RELEASE_DIR.exists():
+            shutil.rmtree(RELEASE_DIR)
+        RELEASE_DIR.mkdir(parents=True, exist_ok=True)
+
+        files = collect_files()
+        archive = create_zip(version, files)
+        checksum = create_sha256(archive)
+        verify_zip(archive)
+
+        print("\n" + "=" * 68)
+        print("RELEASE-PAKET ERFOLGREICH ERSTELLT")
+        print(f"ZIP:    {archive.relative_to(ROOT)}")
+        print(f"SHA256: {checksum.relative_to(ROOT)}")
+        print(f"Größe:  {archive.stat().st_size:,} Bytes")
+        print("=" * 68)
+        return 0
+
     except ReleaseError as exc:
         print(f"\nFEHLER: {exc}", file=sys.stderr)
         return 1
-
-    return 0
+    except KeyboardInterrupt:
+        print("\nAbgebrochen.", file=sys.stderr)
+        return 130
+    except Exception as exc:
+        print(
+            f"\nUNERWARTETER FEHLER: {type(exc).__name__}: {exc}",
+            file=sys.stderr,
+        )
+        return 1
 
 
 if __name__ == "__main__":
