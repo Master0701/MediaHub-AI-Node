@@ -1,4 +1,4 @@
-name: Release
+name: Freigeben
 
 on:
   push:
@@ -11,11 +11,14 @@ permissions:
 
 jobs:
   release:
+    name: Veröffentlichung
     runs-on: ubuntu-latest
 
     steps:
       - name: Repository auschecken
         uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Python einrichten
         uses: actions/setup-python@v7
@@ -34,13 +37,36 @@ jobs:
           VERSION="$(python -c 'from app.version import APP_VERSION; print(APP_VERSION)')"
           test "v${VERSION}" = "${GITHUB_REF_NAME}"
 
+      - name: Release-Notizen prüfen
+        run: |
+          test -s RELEASE_NOTES_PENDING.md
+          grep -q "^# Ausstehende Release-Notizen" RELEASE_NOTES_PENDING.md
+
       - name: Prüfen und Release-Pakete erstellen
         run: python release.py
 
       - name: GitHub-Release erstellen
         uses: softprops/action-gh-release@v3
         with:
-          generate_release_notes: true
+          body_path: RELEASE_NOTES_PENDING.md
+          generate_release_notes: false
           files: |
             release/*.zip
             release/*.sha256
+
+      - name: Temporäre Release-Notizen entfernen
+        if: success() && startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git fetch origin main
+          git checkout main
+          git pull --ff-only origin main
+
+          if [ -f RELEASE_NOTES_PENDING.md ]; then
+            git rm RELEASE_NOTES_PENDING.md
+            git commit -m "Temporäre Release-Notizen nach ${GITHUB_REF_NAME} entfernen"
+            git push origin main
+          fi

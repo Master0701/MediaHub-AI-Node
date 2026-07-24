@@ -31,6 +31,7 @@ INCLUDED = (
     "CONTRIBUTING.md",
     "LICENSE",
     "README.md",
+    "RELEASE_NOTES_PENDING.md",
     "REPOSITORY_SETUP.md",
     "SECURITY.md",
     "THIRD_PARTY_LICENSES.md",
