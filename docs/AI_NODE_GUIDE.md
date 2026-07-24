@@ -1,33 +1,53 @@
-# MediaHub-KI-Knoten – Allgemeines Handbuch
+# MediaHub-AI-Node – Handbuch
 
-Aktuelle Version: **0.7.0**
+## Zweck
 
-Der MediaHub-KI-Knoten ist ein lokaler Dienst für Medienanalyse,
-Wissensverwaltung, Aufgabenwarteschlangen und spätere KI-Funktionen im Heimnetz.
+Der AI-Node stellt zentrale KI-, Wissens- und Analysefunktionen als lokalen
+Dienst bereit. MediaHub und seine Plugins greifen über eine REST-API darauf zu.
 
-## Wichtige Bereiche
+## Grundprinzipien
 
-- REST-API auf Port `8765`
-- OpenAPI unter `/docs`
-- lokale Wissensdatenbank
-- Medien- und Dateinamenanalyse
-- Provider-Schicht
-- Cache-, Modell-, Daten-, Job- und Log-Verzeichnisse
-- Health-Check, Backup und Wiederherstellung
+- eigenständig nutzbarer Dienst
+- lokale Verarbeitung bevorzugt
+- optionale externe Provider nur nach Konfiguration
+- lange Aufgaben über eine Warteschlange
+- klare Trennung zwischen API, Wissensdatenbank, Analyse und Providern
+- erweiterbar für weitere Medientypen wie Hörbücher
 
-## Installation
+## Betriebsverzeichnis
 
-```bash
-git clone https://github.com/Master0701/MediaHub-AI-Node.git
-cd MediaHub-AI-Node
-./install.sh
+Empfohlen:
+
+```text
+/opt/mediahub/ai-node
 ```
 
-## Zugriff
+Virtuelle Python-Umgebung:
 
-- `http://<PI-IP>:8765/health`
-- `http://<PI-IP>:8765/docs`
-- `http://<PI-IP>:8765/openapi.json`
+```text
+/opt/mediahub/venv
+```
 
-Der Dienst ist für das lokale Heimnetz gedacht und sollte nicht ungeschützt ins
-Internet freigegeben werden.
+## Standardport
+
+```text
+8765
+```
+
+## Wichtige Prüfungen
+
+```bash
+sudo systemctl status mediahub-ai-node
+curl -sS http://127.0.0.1:8765/health
+sudo journalctl -u mediahub-ai-node -n 100 --no-pager
+```
+
+## Geplante Erweiterungen
+
+- lokale KI-Modelle und Klassifikatoren
+- optionales OpenAI-/Cloud-Backend
+- In-Video-Erkennung
+- Qualitätsbewertung
+- Wissensbeziehungen und Reihenfolgen
+- Metadaten- und Bild-Cache
+- Status- und Überwachungsoberfläche

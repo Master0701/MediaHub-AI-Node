@@ -1,49 +1,35 @@
 # Wartung
 
-## Wartungsskript
+## Regelmäßige Prüfungen
 
 ```bash
-cd /opt/mediahub/ai-node
-./scripts/health_check.sh
+sudo systemctl status mediahub-ai-node
+sudo journalctl -u mediahub-ai-node --since "24 hours ago"
+df -h
+free -h
 ```
 
-Das Skript prüft:
+## Python-Abhängigkeiten
 
-- systemd-Dienst
-- REST-Health-Endpunkt
-- OpenAPI
-- Python und virtuelle Umgebung
-- RAM
-- SSD-Speicher
-- CPU-Temperatur
-- optional den Smoke-Test
+```bash
+source /opt/mediahub/venv/bin/activate
+pip list --outdated
+```
 
-## Regelmäßiger Ablauf
+Updates nicht ungeprüft in ein laufendes System übernehmen. Zuerst Tests und
+Release-Prüfung ausführen.
 
-### Nach Änderungen
+## Qualitätsprüfung
 
 ```bash
 python -m pytest
-python tests/test_ai_node_smoke.py
-./scripts/backup_ai_node.sh
+python -m ruff check .
+python release.py
 ```
 
-### Wöchentlich
+## Datenbank
 
-- Logs kontrollieren
-- Health-Check ausführen
-- freien SSD-Speicher prüfen
-- fehlgeschlagene Jobs kontrollieren
-
-### Monatlich
-
-- externes Backup kontrollieren
-- SHA-256-Prüfsumme testen
-- Wiederherstellungsanleitung prüfen
-- Abhängigkeiten und Sicherheitsmeldungen kontrollieren
-
-## Aktualisierungen
-
-Vor Betriebssystem-, Python- oder Datenbankänderungen immer ein aktuelles Backup erstellen.
-
-Keine automatische Aktualisierung einbauen, bevor Rückfallstrategie, Datenbankmigration und Release-Prüfung zuverlässig funktionieren.
+- regelmäßig sichern
+- Migrationen dokumentieren
+- Integritätsprüfung nach größeren Änderungen durchführen
+- alte Backups nach einer festgelegten Aufbewahrungszeit bereinigen

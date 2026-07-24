@@ -1,31 +1,27 @@
 # Mitwirken
 
-Beiträge zu MediaHub-AI-Node sind willkommen.
+## Vorbereitung
 
-## Grundablauf
+- Änderungen in einem eigenen Branch durchführen
+- verständliche Commit-Nachrichten verwenden
+- bestehende Struktur und Formatierung beibehalten
+- keine Geheimnisse, Tokens oder privaten Daten einchecken
 
-1. Repository forken.
-2. Einen eigenen Branch erstellen.
-3. Änderungen klein und nachvollziehbar halten.
-4. Tests ergänzen oder aktualisieren.
-5. `python -m pytest` und `ruff check .` ausführen.
-6. Pull Request mit Problem, Lösung und Testbeschreibung öffnen.
+## Vor einem Commit
 
-## Regeln
-
-- Keine Passwörter, Tokens, privaten Pfade oder personenbezogenen Daten einreichen.
-- Neue Abhängigkeiten müssen in `THIRD_PARTY_LICENSES.md` dokumentiert werden.
-- Öffentliche APIs sollen rückwärtskompatibel bleiben oder eine klare Migration erhalten.
-- Linux und Raspberry Pi bleiben primäre Zielplattformen.
-- Funktionen müssen auch ohne Cloud-Anbieter sinnvoll nutzbar bleiben.
-
-## Commit-Nachrichten
-
-Beispiele:
-
-```text
-feat: add knowledge graph endpoint
-fix: prevent duplicate relation imports
-docs: expand Raspberry Pi restore guide
-test: cover dry-run item imports
+```bash
+python -m pytest
+python -m ruff check .
 ```
+
+## Pull Requests
+
+Ein Pull Request sollte enthalten:
+
+- Zweck der Änderung
+- betroffene Komponenten
+- durchgeführte Tests
+- mögliche Risiken oder Migrationen
+- Aktualisierung der Dokumentation bei geändertem Verhalten
+
+Größere Architekturänderungen sollten vor der Umsetzung abgestimmt werden.

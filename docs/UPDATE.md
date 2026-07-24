@@ -1,17 +1,44 @@
-# Aktualisierung
+# Update
 
-## Git-Installation
+## Vor dem Update
 
 ```bash
 cd /opt/mediahub/ai-node
-./update.sh
+git status
 ```
 
-Das Skript erstellt ein Backup, lädt nur Fast-Forward-Änderungen, aktualisiert
-Abhängigkeiten, führt Ruff und Pytest aus, startet den Dienst neu und kontrolliert
-den Health-Endpunkt.
+Lokale Änderungen sollten zuerst gesichert oder eingecheckt werden.
 
-## Release-ZIP
+## Git-Installation aktualisieren
 
-Neues Raspberry-Pi-ZIP herunterladen, SHA-256-Prüfsumme prüfen, entpacken und
-darin `./install.sh` ausführen. Eine vorhandene `.env` wird nicht überschrieben.
+```bash
+cd /opt/mediahub/ai-node
+git pull --ff-only origin main
+
+source /opt/mediahub/venv/bin/activate
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+
+sudo systemctl restart mediahub-ai-node
+sudo systemctl status mediahub-ai-node
+```
+
+## Update über ZIP
+
+Vor dem Überschreiben ein Backup anlegen. Danach das Update-ZIP direkt im
+Projektordner entpacken:
+
+```bash
+cd /opt/mediahub/ai-node
+unzip -o /pfad/zum/Update.zip
+```
+
+Anschließend Abhängigkeiten aktualisieren und den Dienst neu starten.
+
+## Kontrolle
+
+```bash
+curl -sS http://127.0.0.1:8765/health | python -m json.tool
+python -m pytest
+python -m ruff check .
+```

@@ -1,6 +1,12 @@
 # systemd-Dienst
 
-## Beispiel
+## Dienstdatei erstellen
+
+```bash
+sudo nano /etc/systemd/system/mediahub-ai-node.service
+```
+
+Beispiel:
 
 ```ini
 [Unit]
@@ -22,34 +28,16 @@ RestartSec=5
 WantedBy=multi-user.target
 ```
 
-Speichern als:
-
-```text
-/etc/systemd/system/mediahub-ai-node.service
-```
-
 ## Aktivieren
 
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable mediahub-ai-node
-sudo systemctl start mediahub-ai-node
+sudo systemctl enable --now mediahub-ai-node
 ```
 
-## Status und Logs
+## Status und Protokoll
 
 ```bash
-sudo systemctl status mediahub-ai-node --no-pager
-sudo journalctl -u mediahub-ai-node -n 200 --no-pager
+sudo systemctl status mediahub-ai-node
 sudo journalctl -u mediahub-ai-node -f
 ```
-
-## Neustart
-
-```bash
-sudo systemctl restart mediahub-ai-node
-```
-
-## Aktueller Port
-
-Der bestätigte Dienst läuft auf Port `8765`, nicht auf Port `8000`.

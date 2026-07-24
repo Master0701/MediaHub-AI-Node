@@ -2,74 +2,28 @@
 
 ## Zweck
 
-Die Wissensdatenbank speichert nicht nur einzelne Medien, sondern auch Beziehungen zwischen ihnen.
+Die Wissensdatenbank speichert strukturierte Informationen über Medien und ihre
+Beziehungen.
 
-Beispiele:
+## Vorgesehene Inhalte
 
-- Franchise
-- Universum
-- Fortsetzung
-- Prequel
-- Spin-off
-- Crossover
-- Veröffentlichungsreihenfolge
-- chronologische Reihenfolge
-
-## Kernmodelle
-
-- `KnowledgeItem`
-- `KnowledgeAlias`
-- `KnowledgeRelation`
-
-## Erkennung
-
-Der aktuelle Stand unterstützt:
-
-- normalisierte Titel
-- Originaltitel
-- Aliasnamen
-- Jahr
-- Medientyp
+- Filme
+- Serien
+- Staffeln und Episoden
+- spätere Medientypen wie Hörbücher
+- Titel und alternative Titel
 - externe IDs
-- Kandidatenbewertung
-- eindeutige Treffer
-- Konflikterkennung
+- Franchise- und Universumsbeziehungen
+- Prequel, Sequel, Spin-off und Crossover
+- Veröffentlichungs- und chronologische Reihenfolgen
+- Erkennungs- und Qualitätsinformationen
 
-## Import
+## Anforderungen
 
-Der Importer unterstützt:
+- Dubletten zuverlässig erkennen
+- Einträge kontrolliert zusammenführen
+- Beziehungen auf Konsistenz prüfen
+- Herkunft und Vertrauenswürdigkeit von Daten nachvollziehbar halten
+- Backups und Migrationen ermöglichen
 
-- `create`
-- `update`
-- `unchanged`
-- `dry_run`
-- Aliasimport
-- externe IDs
-- Metadaten-Merge
-- Quellenverfolgung
-
-## Beziehungen
-
-Beziehungen werden normalisiert, beispielsweise:
-
-```text
-sequel-of -> sequel_of
-release-order -> release_order
-```
-
-Vorhandene identische Beziehungen werden nicht doppelt angelegt.
-
-## Graphprüfung
-
-Die Integritätsprüfung kontrolliert mindestens:
-
-- ungültige Beziehungen
-- doppelte Beziehungen
-- fehlende Quell- oder Zieleinträge
-
-Der bestätigte Teststand meldete:
-
-```text
-Ungültig: 0
-Dubletten: 0
-```
+Vor manuellen Datenbankänderungen immer ein Backup erstellen.

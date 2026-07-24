@@ -2,17 +2,21 @@
 
 ## Unterstützte Versionen
 
-Während der frühen Entwicklung wird nur der aktuelle Stand unterstützt.
+Sicherheitskorrekturen werden grundsätzlich für den aktuellen Entwicklungsstand
+und das neueste veröffentlichte Release vorgesehen.
 
-## Sicherheitslücken melden
+## Sicherheitsprobleme melden
 
-Sicherheitsprobleme bitte nicht als öffentliches GitHub-Issue veröffentlichen. Nutze stattdessen GitHubs private Security-Advisory-Funktion des Repositorys.
+Sicherheitslücken nicht öffentlich mit vollständigen Ausnutzungsdetails melden.
+Stattdessen einen privaten GitHub-Security-Advisory-Entwurf verwenden, sofern
+diese Funktion für das Repository verfügbar ist.
 
-## Grundregeln
+## Betriebsregeln
 
-- Port 8765 nicht ungeprüft ins Internet weiterleiten.
-- API-Tokens nie in Git speichern.
-- `.env`, Schlüssel und lokale Datenbanken bleiben ausgeschlossen.
-- Dienst möglichst mit einem unprivilegierten Benutzer ausführen.
-- Cloud-Anbieter nur optional und bewusst aktivieren.
-- Backups können sensible Metadaten enthalten und müssen geschützt gespeichert werden.
+- AI-Node standardmäßig nur im vertrauenswürdigen Heimnetz betreiben
+- keine Ports ungeprüft ins Internet weiterleiten
+- Tokens und Passwörter nicht im Repository speichern
+- Dateirechte einschränken
+- System und Python-Abhängigkeiten aktuell halten
+- vor öffentlichem Zugriff Authentifizierung und TLS einrichten
+- Backups sicher und getrennt aufbewahren

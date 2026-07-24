@@ -1,24 +1,12 @@
-# Raspberry Pi 5 vorbereiten
+# Raspberry Pi vorbereiten
 
-## Empfohlene Hardware
+## Voraussetzungen
 
 - Raspberry Pi 5
-- 64-Bit-fähiges Raspberry Pi OS
-- SSD statt microSD für Datenbank, Cache und spätere Modelle
-- stabiles Netzteil
-- kabelgebundenes Netzwerk, wenn möglich
-- ausreichende Kühlung
-
-## Raspberry Pi OS installieren
-
-1. Raspberry Pi Imager öffnen.
-2. Raspberry Pi OS Lite oder Desktop 64-Bit auswählen.
-3. SSD als Ziel auswählen.
-4. Hostname festlegen, beispielsweise `mediahub-pi`.
-5. SSH aktivieren.
-6. Benutzer und sicheres Passwort festlegen.
-7. Zeitzone und Tastatur einstellen.
-8. Image schreiben und den Pi starten.
+- 64-Bit Raspberry Pi OS oder kompatibles Debian-Linux
+- Netzwerkzugriff im Heimnetz
+- ausreichend freier Speicher
+- Benutzer `mediahub` mit passenden Rechten
 
 ## System aktualisieren
 
@@ -28,37 +16,21 @@ sudo apt full-upgrade -y
 sudo reboot
 ```
 
-## Grundpakete
+## Grundpakete installieren
 
 ```bash
-sudo apt install -y \
-  python3 \
-  python3-venv \
-  python3-pip \
-  curl \
-  git \
-  tar
+sudo apt install -y git python3 python3-venv python3-pip unzip curl
 ```
 
-Für spätere Video- und Audioanalyse:
+## Verzeichnisse vorbereiten
 
 ```bash
-sudo apt install -y ffmpeg
-```
-
-## Benutzer und Verzeichnisse
-
-```bash
-sudo useradd \
-  --system \
-  --create-home \
-  --shell /bin/bash \
-  mediahub 2>/dev/null || true
-
 sudo mkdir -p /opt/mediahub/ai-node
 sudo chown -R mediahub:mediahub /opt/mediahub
 ```
 
-## Netzwerk
+## Hinweise
 
-Der aktuelle Standardport ist `8765`. Der Dienst ist für das Heimnetz vorgesehen. Keine Portweiterleitung ins Internet einrichten, solange Authentifizierung und Absicherung nicht vollständig konfiguriert sind.
+Der Dienst ist zunächst für das lokale Heimnetz vorgesehen. Eine öffentliche
+Freigabe sollte erst nach Einrichtung von Authentifizierung, Firewall und
+verschlüsselter Verbindung erfolgen.

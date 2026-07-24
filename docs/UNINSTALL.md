@@ -1,9 +1,26 @@
 # Deinstallation
 
+## Dienst stoppen und deaktivieren
+
 ```bash
-cd /opt/mediahub/ai-node
-./uninstall.sh
+sudo systemctl stop mediahub-ai-node
+sudo systemctl disable mediahub-ai-node
 ```
 
-Das Skript fragt getrennt nach Backup, systemd-Dienst, virtueller Umgebung und
-dem endgültigen Löschen des Projektordners.
+## Dienstdatei entfernen
+
+```bash
+sudo rm -f /etc/systemd/system/mediahub-ai-node.service
+sudo systemctl daemon-reload
+```
+
+## Programmdateien entfernen
+
+Vorher bei Bedarf Datenbank, Konfiguration und Backups sichern.
+
+```bash
+sudo rm -rf /opt/mediahub/ai-node
+```
+
+Die gemeinsam verwendete virtuelle Umgebung `/opt/mediahub/venv` nur löschen,
+wenn sie von keiner anderen MediaHub-Komponente mehr verwendet wird.
