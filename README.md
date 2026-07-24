@@ -81,3 +81,18 @@ Gesamtergebnis: ERFOLGREICH
 ```
 
 Geprüft wurden Health-API, OpenAPI-Endpunkte, Wissenseintrag-Import, Beziehungsimport und Graph-Integrität.
+
+
+## Installation und Betrieb
+
+```bash
+git clone https://github.com/Master0701/MediaHub-AI-Node.git
+cd MediaHub-AI-Node
+./install.sh
+```
+
+- [Installation](docs/INSTALLATION.md)
+- [Allgemeines KI-Handbuch](docs/AI_NODE_GUIDE.md)
+- [Update](docs/UPDATE.md)
+- [Deinstallation](docs/UNINSTALL.md)
+- [Backup und Wiederherstellung](docs/BACKUP_AND_RESTORE.md)
