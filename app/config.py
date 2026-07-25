@@ -13,3 +13,19 @@ CACHE_DIR = BASE_DIR / "cache"
 JOBS_DIR = BASE_DIR / "jobs"
 LOG_DIR = BASE_DIR / "logs"
 MODELS_DIR = BASE_DIR / "models"
+
+AI_NODE_DIR = Path(
+    os.getenv("MEDIAHUB_AI_NODE_DIR", str(BASE_DIR / "ai-node"))
+)
+PLUGINS_DIR = Path(
+    os.getenv(
+        "MEDIAHUB_AI_NODE_PLUGINS_DIR",
+        str(AI_NODE_DIR / "plugins"),
+    )
+)
+PLUGIN_STATE_FILE = Path(
+    os.getenv(
+        "MEDIAHUB_AI_NODE_PLUGIN_STATE_FILE",
+        str(AI_NODE_DIR / "data" / "plugin_state.json"),
+    )
+)
