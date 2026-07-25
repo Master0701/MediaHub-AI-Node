@@ -5,10 +5,10 @@ from __future__ import annotations
 import json
 import secrets
 import shutil
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from typing import Callable
 
 from app.plugins.install_plan import (
     InstallAction,
@@ -125,6 +125,31 @@ class PluginPlanStore:
             loaded += 1
 
         return loaded
+
+    def update_plan(
+        self,
+        plan_id: str,
+        plan: PluginInstallPlan,
+    ) -> StoredPluginPlan:
+        """Aktualisiert einen gespeicherten Plan nach ausgeführten Schritten."""
+
+        stored = self.get(plan_id)
+        if stored is None:
+            raise KeyError("Installationsplan nicht gefunden oder abgelaufen.")
+
+        updated = StoredPluginPlan(
+            plan_id=stored.plan_id,
+            plugin_id=stored.plugin_id,
+            archive_path=stored.archive_path,
+            sha256=stored.sha256,
+            plan=plan,
+            created_at=stored.created_at,
+            expires_at=stored.expires_at,
+        )
+
+        self._plans[plan_id] = updated
+        self._write_metadata(updated)
+        return updated
 
     def get(self, plan_id: str) -> StoredPluginPlan | None:
         """Liefert einen gültigen Plan oder `None`."""
