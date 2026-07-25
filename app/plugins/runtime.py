@@ -2,6 +2,7 @@
 
 from app.config import (
     PLUGIN_BACKUP_DIR,
+    PLUGIN_PLAN_DIR,
     PLUGIN_STATE_FILE,
     PLUGINS_DIR,
 )
@@ -19,4 +20,7 @@ plugin_installer = PluginInstaller(
     backup_root=PLUGIN_BACKUP_DIR,
 )
 
-plugin_plan_store = PluginPlanStore(ttl_minutes=15)
+plugin_plan_store = PluginPlanStore(
+    storage_root=PLUGIN_PLAN_DIR,
+    ttl_minutes=15,
+)

@@ -1,4 +1,4 @@
-"""Tests für Plan-ID, Bestätigung und Abbruch."""
+"""Tests für Plan-ID, Bestätigung, Abbruch und Neustart."""
 
 from __future__ import annotations
 
@@ -50,10 +50,10 @@ def create_package(path: Path) -> bytes:
 
 
 @pytest.fixture
-def client(
+def runtime(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
-) -> TestClient:
+) -> tuple[PluginManager, PluginInstaller, PluginPlanStore]:
     manager = PluginManager(
         plugin_root=tmp_path / "plugins",
         state_path=tmp_path / "plugin-state.json",
@@ -62,13 +62,23 @@ def client(
         plugin_root=tmp_path / "plugins",
         backup_root=tmp_path / "backups",
     )
-    store = PluginPlanStore(ttl_minutes=15)
+    store = PluginPlanStore(
+        storage_root=tmp_path / "plans",
+        ttl_minutes=15,
+    )
 
     monkeypatch.setattr(plan_api, "plugin_manager", manager)
     monkeypatch.setattr(plan_api, "plugin_installer", installer)
     monkeypatch.setattr(plan_api, "plugin_plan_store", store)
     monkeypatch.setenv(API_TOKEN_ENV_NAME, VALID_TOKEN)
 
+    return manager, installer, store
+
+
+@pytest.fixture
+def client(
+    runtime: tuple[PluginManager, PluginInstaller, PluginPlanStore],
+) -> TestClient:
     test_app = FastAPI()
     test_app.include_router(router)
     return TestClient(test_app)
@@ -175,3 +185,34 @@ def test_cancel_plan(
 
     assert response.status_code == 200
     assert response.json()["status"] == "cancelled"
+
+
+def test_plan_can_be_confirmed_after_store_reload(
+    tmp_path: Path,
+    runtime: tuple[PluginManager, PluginInstaller, PluginPlanStore],
+    client: TestClient,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    body = create_package(tmp_path / "plugin.zip")
+    plan_id, checksum = create_plan(client, body)
+
+    reloaded_store = PluginPlanStore(
+        storage_root=tmp_path / "plans",
+        ttl_minutes=15,
+    )
+    monkeypatch.setattr(
+        plan_api,
+        "plugin_plan_store",
+        reloaded_store,
+    )
+
+    response = client.post(
+        f"/plugins/plan/{plan_id}/confirm",
+        headers={
+            "Authorization": f"Bearer {VALID_TOKEN}",
+            "X-Plugin-SHA256": checksum,
+        },
+    )
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "installed"

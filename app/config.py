@@ -38,3 +38,9 @@ PLUGIN_BACKUP_DIR = Path(
         str(AI_NODE_DIR / "backups" / "plugins"),
     )
 )
+PLUGIN_PLAN_DIR = Path(
+    os.getenv(
+        "MEDIAHUB_AI_NODE_PLUGIN_PLAN_DIR",
+        str(AI_NODE_DIR / "data" / "plugin_plans"),
+    )
+)

@@ -68,8 +68,6 @@ async def create_plugin_install_plan_endpoint(
         Header(alias="X-Plugin-Filename"),
     ] = None,
 ) -> dict[str, Any]:
-    """Prüft ein Plugin-ZIP und speichert einen kurzlebigen Plan."""
-
     content_type = request.headers.get("content-type", "")
     if "application/zip" not in content_type:
         raise HTTPException(
@@ -99,7 +97,6 @@ async def create_plugin_install_plan_endpoint(
         )
 
     temporary_path: Path | None = None
-    keep_temporary_file = False
 
     try:
         with tempfile.NamedTemporaryFile(
@@ -127,7 +124,6 @@ async def create_plugin_install_plan_endpoint(
             sha256=package.sha256,
             plan=plan,
         )
-        keep_temporary_file = True
 
         return {
             "status": "plan_created",
@@ -155,7 +151,7 @@ async def create_plugin_install_plan_endpoint(
             detail=str(exc),
         ) from exc
     finally:
-        if temporary_path is not None and not keep_temporary_file:
+        if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
 
 
@@ -170,8 +166,6 @@ def confirm_plugin_install_plan_endpoint(
         Header(alias="X-Plugin-SHA256"),
     ],
 ) -> dict[str, Any]:
-    """Bestätigt und installiert exakt das zuvor geprüfte Paket."""
-
     stored = plugin_plan_store.get(plan_id)
     if stored is None:
         raise HTTPException(
@@ -226,7 +220,7 @@ def confirm_plugin_install_plan_endpoint(
             },
         }
     finally:
-        consumed.archive_path.unlink(missing_ok=True)
+        plugin_plan_store.finalize_consumed(consumed)
 
 
 @router.delete(
@@ -236,8 +230,6 @@ def confirm_plugin_install_plan_endpoint(
 def cancel_plugin_install_plan_endpoint(
     plan_id: str,
 ) -> dict[str, str]:
-    """Verwirft einen gespeicherten Installationsplan."""
-
     stored = plugin_plan_store.get(plan_id)
     if stored is None:
         raise HTTPException(
