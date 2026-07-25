@@ -1,0 +1,16 @@
+{
+  "id": "example.hello",
+  "name": "Hello AI-Node Plugin",
+  "version": "1.0.0",
+  "type": "utility",
+  "entrypoint": "plugin:HelloPlugin",
+  "api_version": "1",
+  "description": "Minimales Beispiel für ein AI-Node-Plugin.",
+  "author": "MediaHub",
+  "license": "MIT",
+  "enabled_by_default": true,
+  "permissions": [],
+  "capabilities": ["example"],
+  "dependencies": [],
+  "required_tools": []
+}

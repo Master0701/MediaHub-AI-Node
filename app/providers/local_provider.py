@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from time import monotonic
-from typing import Any, Mapping
+from typing import Any
 
 from app.providers.base import (
     AIProvider,
