@@ -12,6 +12,7 @@ from app.api.jobs import router as jobs_router
 from app.api.knowledge import router as knowledge_router
 from app.api.knowledge_import import router as knowledge_import_router
 from app.api.plugins import router as plugins_router
+from app.api.plugin_plans import router as plugin_plans_router
 from app.api.providers import router as providers_router
 from app.api.quality import router as quality_router
 from app.api.references import router as references_router
@@ -77,6 +78,7 @@ app.include_router(cache_router)
 app.include_router(knowledge_router)
 app.include_router(providers_router)
 app.include_router(plugins_router)
+app.include_router(plugin_plans_router)
 app.include_router(quality_router)
 app.include_router(references_router)
 app.include_router(knowledge_import_router)

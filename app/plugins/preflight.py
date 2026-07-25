@@ -66,7 +66,7 @@ class PluginPreflightResult:
 
 
 class PluginPreflightChecker:
-    """Prüft Lizenz, Python-Pakete, Tools und Plugin-Abhängigkeiten."""
+    """Prüft Voraussetzungen und kann fehlende Punkte auch nur melden."""
 
     def __init__(
         self,
@@ -78,10 +78,12 @@ class PluginPreflightChecker:
             for plugin_id in installed_plugin_ids
         }
 
-    def check(
+    def inspect(
         self,
         package: ValidatedPluginPackage,
     ) -> PluginPreflightResult:
+        """Ermittelt alle Voraussetzungen, ohne bei fehlenden Punkten abzubrechen."""
+
         with ZipFile(package.archive_path) as archive:
             license_present = self._has_license(
                 archive,
@@ -92,27 +94,13 @@ class PluginPreflightChecker:
                 package.root_directory,
             )
 
-        if not license_present:
-            raise PluginPreflightError(
-                "Im Plugin-Paket fehlt eine Lizenzdatei."
-            )
-
         python_checks = tuple(
             self._check_python_requirement(requirement)
             for requirement in requirements
         )
 
         tool_checks = tuple(
-            DependencyCheck(
-                name=tool,
-                required=True,
-                available=shutil.which(tool) is not None,
-                details=(
-                    "Tool gefunden."
-                    if shutil.which(tool) is not None
-                    else "Tool nicht im PATH gefunden."
-                ),
-            )
+            self._check_tool(tool)
             for tool in package.manifest.required_tools
         )
 
@@ -133,13 +121,15 @@ class PluginPreflightChecker:
         )
 
         warnings: list[str] = []
+        if not license_present:
+            warnings.append("Im Plugin-Paket fehlt eine Lizenzdatei.")
         if not requirements:
             warnings.append(
                 "Keine requirements.txt vorhanden; "
                 "es werden keine Python-Abhängigkeiten geprüft."
             )
 
-        result = PluginPreflightResult(
+        return PluginPreflightResult(
             plugin_id=package.manifest.plugin_id,
             license_present=license_present,
             python_requirements=python_checks,
@@ -147,6 +137,19 @@ class PluginPreflightChecker:
             plugin_dependencies=plugin_checks,
             warnings=tuple(warnings),
         )
+
+    def check(
+        self,
+        package: ValidatedPluginPackage,
+    ) -> PluginPreflightResult:
+        """Prüft streng und lehnt nicht erfüllte Voraussetzungen ab."""
+
+        result = self.inspect(package)
+
+        if not result.license_present:
+            raise PluginPreflightError(
+                "Im Plugin-Paket fehlt eine Lizenzdatei."
+            )
 
         if not result.ready:
             missing = [
@@ -164,6 +167,20 @@ class PluginPreflightChecker:
             )
 
         return result
+
+    @staticmethod
+    def _check_tool(tool: str) -> DependencyCheck:
+        available = shutil.which(tool) is not None
+        return DependencyCheck(
+            name=tool,
+            required=True,
+            available=available,
+            details=(
+                "Tool gefunden."
+                if available
+                else "Tool nicht im PATH gefunden."
+            ),
+        )
 
     @staticmethod
     def _has_license(
