@@ -1,4 +1,4 @@
-"""Geschützter REST-Endpunkt zur reinen Installationsplanung."""
+"""Geschützte REST-Endpunkte für Plugin-Installationspläne."""
 
 from __future__ import annotations
 
@@ -27,12 +27,18 @@ from app.plugins.preflight import (
     PluginPreflightChecker,
     PluginPreflightError,
 )
-from app.plugins.runtime import plugin_manager
+from app.plugins.runtime import (
+    plugin_installer,
+    plugin_manager,
+    plugin_plan_store,
+)
+from app.plugins.serialization import plugin_record_to_dict
 from app.security.api_token import require_api_token
 
 router = APIRouter(prefix="/plugins", tags=["AI Plugins"])
 
 MAX_UPLOAD_SIZE = 512 * 1024 * 1024
+WRITE_DEPENDENCIES = [Depends(require_api_token)]
 
 
 def _installed_plugin_ids() -> set[str]:
@@ -42,9 +48,14 @@ def _installed_plugin_ids() -> set[str]:
     }
 
 
+def _refresh_plugins() -> None:
+    plugin_manager.discover()
+    plugin_manager.load_enabled()
+
+
 @router.post(
     "/plan",
-    dependencies=[Depends(require_api_token)],
+    dependencies=WRITE_DEPENDENCIES,
 )
 async def create_plugin_install_plan_endpoint(
     request: Request,
@@ -57,7 +68,7 @@ async def create_plugin_install_plan_endpoint(
         Header(alias="X-Plugin-Filename"),
     ] = None,
 ) -> dict[str, Any]:
-    """Prüft ein Plugin-Paket und liefert nur einen Installationsplan."""
+    """Prüft ein Plugin-ZIP und speichert einen kurzlebigen Plan."""
 
     content_type = request.headers.get("content-type", "")
     if "application/zip" not in content_type:
@@ -88,6 +99,7 @@ async def create_plugin_install_plan_endpoint(
         )
 
     temporary_path: Path | None = None
+    keep_temporary_file = False
 
     try:
         with tempfile.NamedTemporaryFile(
@@ -109,8 +121,19 @@ async def create_plugin_install_plan_endpoint(
 
         plan = PluginInstallPlanBuilder().build(preflight)
 
+        stored = plugin_plan_store.create(
+            plugin_id=package.manifest.plugin_id,
+            archive_path=temporary_path,
+            sha256=package.sha256,
+            plan=plan,
+        )
+        keep_temporary_file = True
+
         return {
             "status": "plan_created",
+            "plan_id": stored.plan_id,
+            "created_at": stored.created_at.isoformat(),
+            "expires_at": stored.expires_at.isoformat(),
             "package": {
                 "plugin_id": package.manifest.plugin_id,
                 "name": package.manifest.name,
@@ -132,5 +155,99 @@ async def create_plugin_install_plan_endpoint(
             detail=str(exc),
         ) from exc
     finally:
-        if temporary_path is not None:
+        if temporary_path is not None and not keep_temporary_file:
             temporary_path.unlink(missing_ok=True)
+
+
+@router.post(
+    "/plan/{plan_id}/confirm",
+    dependencies=WRITE_DEPENDENCIES,
+)
+def confirm_plugin_install_plan_endpoint(
+    plan_id: str,
+    x_plugin_sha256: Annotated[
+        str,
+        Header(alias="X-Plugin-SHA256"),
+    ],
+) -> dict[str, Any]:
+    """Bestätigt und installiert exakt das zuvor geprüfte Paket."""
+
+    stored = plugin_plan_store.get(plan_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Installationsplan nicht gefunden oder abgelaufen.",
+        )
+
+    if stored.sha256 != x_plugin_sha256.strip().lower():
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Die SHA-256-Prüfsumme passt nicht zum gespeicherten Plan.",
+        )
+
+    if stored.plan.requires_confirmation and stored.plan.actions:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Der Installationsplan enthält noch nicht ausgeführte "
+                "Voraussetzungen und kann deshalb nicht bestätigt werden."
+            ),
+        )
+
+    consumed = plugin_plan_store.consume(plan_id)
+
+    try:
+        result = plugin_installer.install(
+            consumed.archive_path,
+            expected_sha256=consumed.sha256,
+            installed_plugin_ids=_installed_plugin_ids(),
+        )
+
+        _refresh_plugins()
+        record = plugin_manager.registry.get(result.plugin_id)
+
+        return {
+            "status": "installed",
+            "plan_id": plan_id,
+            "plugin": (
+                plugin_record_to_dict(record)
+                if record is not None
+                else None
+            ),
+            "installation": {
+                "sha256": result.sha256,
+                "replaced_existing": result.replaced_existing,
+                "backup_created": result.backup_path is not None,
+                "backup_path": (
+                    str(result.backup_path)
+                    if result.backup_path is not None
+                    else None
+                ),
+            },
+        }
+    finally:
+        consumed.archive_path.unlink(missing_ok=True)
+
+
+@router.delete(
+    "/plan/{plan_id}",
+    dependencies=WRITE_DEPENDENCIES,
+)
+def cancel_plugin_install_plan_endpoint(
+    plan_id: str,
+) -> dict[str, str]:
+    """Verwirft einen gespeicherten Installationsplan."""
+
+    stored = plugin_plan_store.get(plan_id)
+    if stored is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Installationsplan nicht gefunden oder abgelaufen.",
+        )
+
+    plugin_plan_store.delete(plan_id)
+
+    return {
+        "status": "cancelled",
+        "plan_id": plan_id,
+    }
