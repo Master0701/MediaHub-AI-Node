@@ -14,6 +14,10 @@ from app.plugins.package_validator import (
     ValidatedPluginPackage,
     validate_plugin_package,
 )
+from app.plugins.preflight import (
+    PluginPreflightChecker,
+    PluginPreflightResult,
+)
 
 
 class PluginInstallError(PluginError):
@@ -30,6 +34,7 @@ class PluginInstallResult:
     backup_path: Path | None
     sha256: str
     replaced_existing: bool
+    preflight: PluginPreflightResult
 
 
 @dataclass(frozen=True, slots=True)
@@ -58,11 +63,16 @@ class PluginInstaller:
         archive_path: Path,
         *,
         expected_sha256: str | None = None,
+        installed_plugin_ids: set[str] | None = None,
     ) -> PluginInstallResult:
         package = validate_plugin_package(
             archive_path,
             expected_sha256=expected_sha256,
         )
+
+        preflight = PluginPreflightChecker(
+            installed_plugin_ids=installed_plugin_ids or set(),
+        ).check(package)
 
         self.plugin_root.mkdir(parents=True, exist_ok=True)
         self.backup_root.mkdir(parents=True, exist_ok=True)
@@ -122,6 +132,7 @@ class PluginInstaller:
             backup_path=backup_path,
             sha256=package.sha256,
             replaced_existing=replaced_existing,
+            preflight=preflight,
         )
 
     def remove(
@@ -130,8 +141,6 @@ class PluginInstaller:
         *,
         create_backup: bool = True,
     ) -> PluginRemoveResult:
-        """Entfernt ein Plugin optional nach vorherigem Backup."""
-
         normalized_id = plugin_id.strip().lower()
         install_path = (self.plugin_root / normalized_id).resolve()
         self._ensure_inside_root(install_path, self.plugin_root)
@@ -230,12 +239,14 @@ class PluginInstaller:
         plugin_id: str,
         backup_name: str,
     ) -> Path:
-        """Löst einen Backup-Namen sicher innerhalb des Plugin-Ordners auf."""
-
         normalized_id = plugin_id.strip().lower()
         normalized_backup = backup_name.strip()
 
-        if not normalized_backup or "/" in normalized_backup or "\\" in normalized_backup:
+        if (
+            not normalized_backup
+            or "/" in normalized_backup
+            or "\\" in normalized_backup
+        ):
             raise PluginInstallError("Ungültiger Backup-Name.")
 
         backup_path = (

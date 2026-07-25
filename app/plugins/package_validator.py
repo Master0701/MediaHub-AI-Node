@@ -1,4 +1,4 @@
-"""Prüfung von AI-Plugin-ZIP-Paketen vor einer späteren Installation."""
+"""Prüfung von AI-Plugin-ZIP-Paketen vor einer Installation."""
 
 from __future__ import annotations
 
@@ -22,8 +22,6 @@ class PluginPackageError(PluginError):
 
 @dataclass(frozen=True, slots=True)
 class ValidatedPluginPackage:
-    """Ergebnis einer erfolgreichen Paketprüfung."""
-
     archive_path: Path
     sha256: str
     manifest: PluginManifest
@@ -33,8 +31,6 @@ class ValidatedPluginPackage:
 
 
 def calculate_sha256(path: Path) -> str:
-    """Berechnet die SHA-256-Prüfsumme einer Datei."""
-
     digest = hashlib.sha256()
 
     with path.open("rb") as handle:
@@ -52,8 +48,6 @@ def validate_plugin_package(
     max_uncompressed_size: int = DEFAULT_MAX_UNCOMPRESSED_SIZE,
     max_file_count: int = DEFAULT_MAX_FILE_COUNT,
 ) -> ValidatedPluginPackage:
-    """Prüft Integrität, Pfade, Größen und Manifest eines Plugin-ZIPs."""
-
     archive_path = archive_path.resolve()
 
     if not archive_path.is_file():
@@ -83,7 +77,9 @@ def validate_plugin_package(
             entries = archive.infolist()
 
             if not entries:
-                raise PluginPackageError("Das Plugin-Paket enthält keine Dateien.")
+                raise PluginPackageError(
+                    "Das Plugin-Paket enthält keine Dateien."
+                )
 
             if len(entries) > max_file_count:
                 raise PluginPackageError(
@@ -93,16 +89,22 @@ def validate_plugin_package(
             total_size = sum(entry.file_size for entry in entries)
             if total_size > max_uncompressed_size:
                 raise PluginPackageError(
-                    "Der entpackte Paketinhalt überschreitet die Größenbegrenzung."
+                    "Der entpackte Paketinhalt überschreitet "
+                    "die Größenbegrenzung."
                 )
 
             safe_paths = [
-                _validate_archive_entry(entry.filename, entry.external_attr)
+                _validate_archive_entry(
+                    entry.filename,
+                    entry.external_attr,
+                )
                 for entry in entries
             ]
 
             root_directory = _find_single_root_directory(safe_paths)
-            manifest_name = PurePosixPath(root_directory) / "plugin.json"
+            manifest_name = (
+                PurePosixPath(root_directory) / "plugin.json"
+            )
 
             try:
                 manifest_data = archive.read(str(manifest_name))
@@ -127,7 +129,10 @@ def validate_plugin_package(
         temporary_manifest.unlink(missing_ok=True)
 
     expected_root = manifest.plugin_id.replace(".", "_")
-    if root_directory not in {manifest.plugin_id, expected_root}:
+    if root_directory not in {
+        manifest.plugin_id,
+        expected_root,
+    }:
         raise PluginPackageError(
             "Der oberste Paketordner muss der Plugin-ID entsprechen."
         )
@@ -154,7 +159,10 @@ def _validate_archive_entry(
             f"Absoluter Pfad im Plugin-Paket ist nicht erlaubt: {filename}"
         )
 
-    if not path.parts or any(part in {"", ".", ".."} for part in path.parts):
+    if not path.parts or any(
+        part in {"", ".", ".."}
+        for part in path.parts
+    ):
         raise PluginPackageError(
             f"Unsicherer Pfad im Plugin-Paket: {filename}"
         )
@@ -162,7 +170,8 @@ def _validate_archive_entry(
     unix_mode = external_attr >> 16
     if unix_mode and stat.S_ISLNK(unix_mode):
         raise PluginPackageError(
-            f"Symbolische Links sind im Plugin-Paket nicht erlaubt: {filename}"
+            "Symbolische Links sind im Plugin-Paket nicht erlaubt: "
+            f"{filename}"
         )
 
     return path
@@ -175,7 +184,8 @@ def _find_single_root_directory(
 
     if len(roots) != 1:
         raise PluginPackageError(
-            "Das Plugin-Paket muss genau einen obersten Plugin-Ordner besitzen."
+            "Das Plugin-Paket muss genau einen obersten "
+            "Plugin-Ordner besitzen."
         )
 
     return next(iter(roots))

@@ -39,6 +39,10 @@ def create_plugin_zip(path: Path) -> bytes:
             "class TestPlugin:\n"
             "    name = 'api-test'\n",
         )
+        archive.writestr(
+            "provider.api-test/LICENSE",
+            "MIT License\n",
+        )
 
     return path.read_bytes()
 

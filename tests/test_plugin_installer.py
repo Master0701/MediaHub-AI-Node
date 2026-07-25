@@ -33,6 +33,10 @@ def create_package(
             "provider.test/plugin.py",
             f"MARKER = {marker!r}\n",
         )
+        archive.writestr(
+            "provider.test/LICENSE",
+            "MIT License\n",
+        )
 
 
 def test_fresh_install(tmp_path: Path) -> None:
@@ -57,6 +61,7 @@ def test_fresh_install(tmp_path: Path) -> None:
     assert result.version == "1.0.0"
     assert result.replaced_existing is False
     assert result.backup_path is None
+    assert result.preflight.ready is True
     assert (result.install_path / "plugin.json").is_file()
     assert "erste-version" in (
         result.install_path / "plugin.py"

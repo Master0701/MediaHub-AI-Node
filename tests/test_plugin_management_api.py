@@ -45,6 +45,10 @@ def create_plugin_zip(
             "class TestPlugin:\n"
             f"    marker = {marker!r}\n",
         )
+        archive.writestr(
+            "provider.manage-test/LICENSE",
+            "MIT License\n",
+        )
 
     return path.read_bytes()
 
@@ -95,6 +99,7 @@ def install_via_api(
             "X-Plugin-Filename": archive_path.name,
         },
     )
+
     assert response.status_code == 201
 
 

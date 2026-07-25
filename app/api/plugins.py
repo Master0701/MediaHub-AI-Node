@@ -18,6 +18,7 @@ from fastapi import (
 
 from app.plugins.installer import PluginInstallError
 from app.plugins.package_validator import PluginPackageError
+from app.plugins.preflight import PluginPreflightError
 from app.plugins.runtime import plugin_installer, plugin_manager
 from app.plugins.serialization import plugin_record_to_dict
 from app.security.api_token import require_api_token
@@ -31,6 +32,13 @@ WRITE_DEPENDENCIES = [Depends(require_api_token)]
 def _refresh_plugins() -> None:
     plugin_manager.discover()
     plugin_manager.load_enabled()
+
+
+def _installed_plugin_ids() -> set[str]:
+    return {
+        record.manifest.plugin_id
+        for record in plugin_manager.registry.all()
+    }
 
 
 @router.get("")
@@ -122,6 +130,7 @@ async def install_plugin_endpoint(
         result = plugin_installer.install(
             temporary_path,
             expected_sha256=x_plugin_sha256,
+            installed_plugin_ids=_installed_plugin_ids(),
         )
 
         _refresh_plugins()
@@ -140,6 +149,36 @@ async def install_plugin_endpoint(
                     "error": "Plugin wurde installiert, aber nicht erkannt.",
                 }
             ),
+            "preflight": {
+                "ready": result.preflight.ready,
+                "license_present": result.preflight.license_present,
+                "warnings": list(result.preflight.warnings),
+                "python_requirements": [
+                    {
+                        "name": check.name,
+                        "available": check.available,
+                        "installed_version": check.installed_version,
+                        "details": check.details,
+                    }
+                    for check in result.preflight.python_requirements
+                ],
+                "required_tools": [
+                    {
+                        "name": check.name,
+                        "available": check.available,
+                        "details": check.details,
+                    }
+                    for check in result.preflight.required_tools
+                ],
+                "plugin_dependencies": [
+                    {
+                        "name": check.name,
+                        "available": check.available,
+                        "details": check.details,
+                    }
+                    for check in result.preflight.plugin_dependencies
+                ],
+            },
             "installation": {
                 "sha256": result.sha256,
                 "replaced_existing": result.replaced_existing,
@@ -152,7 +191,10 @@ async def install_plugin_endpoint(
             },
         }
 
-    except PluginPackageError as exc:
+    except (
+        PluginPackageError,
+        PluginPreflightError,
+    ) as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
