@@ -11,6 +11,7 @@ from fastapi import (
     Depends,
     Header,
     HTTPException,
+    Query,
     Request,
     status,
 )
@@ -24,12 +25,16 @@ from app.security.api_token import require_api_token
 router = APIRouter(prefix="/plugins", tags=["AI Plugins"])
 
 MAX_UPLOAD_SIZE = 512 * 1024 * 1024
+WRITE_DEPENDENCIES = [Depends(require_api_token)]
+
+
+def _refresh_plugins() -> None:
+    plugin_manager.discover()
+    plugin_manager.load_enabled()
 
 
 @router.get("")
 def list_plugins_endpoint() -> dict[str, Any]:
-    """Listet alle vom AI-Node erkannten Plugins."""
-
     plugins = [
         plugin_record_to_dict(record)
         for record in plugin_manager.registry.all()
@@ -49,8 +54,6 @@ def list_plugins_endpoint() -> dict[str, Any]:
 
 @router.get("/{plugin_id}")
 def get_plugin_endpoint(plugin_id: str) -> dict[str, Any]:
-    """Liefert den Status eines einzelnen Plugins."""
-
     record = plugin_manager.registry.get(plugin_id)
     if record is None:
         raise HTTPException(
@@ -64,7 +67,7 @@ def get_plugin_endpoint(plugin_id: str) -> dict[str, Any]:
 @router.post(
     "/install",
     status_code=status.HTTP_201_CREATED,
-    dependencies=[Depends(require_api_token)],
+    dependencies=WRITE_DEPENDENCIES,
 )
 async def install_plugin_endpoint(
     request: Request,
@@ -77,12 +80,6 @@ async def install_plugin_endpoint(
         Header(alias="X-Plugin-Filename"),
     ] = None,
 ) -> dict[str, Any]:
-    """Installiert ein geprüftes Plugin-ZIP.
-
-    Der ZIP-Inhalt wird als roher Request-Body mit
-    `Content-Type: application/zip` übertragen.
-    """
-
     content_type = request.headers.get("content-type", "")
     if "application/zip" not in content_type:
         raise HTTPException(
@@ -127,9 +124,7 @@ async def install_plugin_endpoint(
             expected_sha256=x_plugin_sha256,
         )
 
-        plugin_manager.discover()
-        plugin_manager.load_enabled()
-
+        _refresh_plugins()
         record = plugin_manager.registry.get(result.plugin_id)
 
         return {
@@ -170,3 +165,131 @@ async def install_plugin_endpoint(
     finally:
         if temporary_path is not None:
             temporary_path.unlink(missing_ok=True)
+
+
+@router.post(
+    "/{plugin_id}/enable",
+    dependencies=WRITE_DEPENDENCIES,
+)
+def enable_plugin_endpoint(plugin_id: str) -> dict[str, Any]:
+    try:
+        plugin_manager.enable(plugin_id)
+        _refresh_plugins()
+        record = plugin_manager.registry.require(plugin_id)
+        return {
+            "status": "enabled",
+            "plugin": plugin_record_to_dict(record),
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.post(
+    "/{plugin_id}/disable",
+    dependencies=WRITE_DEPENDENCIES,
+)
+def disable_plugin_endpoint(plugin_id: str) -> dict[str, Any]:
+    try:
+        plugin_manager.disable(plugin_id)
+        _refresh_plugins()
+        record = plugin_manager.registry.require(plugin_id)
+        return {
+            "status": "disabled",
+            "plugin": plugin_record_to_dict(record),
+        }
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+
+
+@router.delete(
+    "/{plugin_id}",
+    dependencies=WRITE_DEPENDENCIES,
+)
+def remove_plugin_endpoint(
+    plugin_id: str,
+    create_backup: Annotated[bool, Query()] = True,
+) -> dict[str, Any]:
+    try:
+        result = plugin_installer.remove(
+            plugin_id,
+            create_backup=create_backup,
+        )
+        _refresh_plugins()
+        return {
+            "status": "removed",
+            "plugin_id": result.plugin_id,
+            "backup_created": result.backup_path is not None,
+            "backup_path": (
+                str(result.backup_path)
+                if result.backup_path is not None
+                else None
+            ),
+        }
+    except PluginInstallError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(exc),
+        ) from exc
+
+
+@router.get(
+    "/{plugin_id}/backups",
+    dependencies=WRITE_DEPENDENCIES,
+)
+def list_plugin_backups_endpoint(plugin_id: str) -> dict[str, Any]:
+    backups = plugin_installer.list_backups(plugin_id)
+    return {
+        "plugin_id": plugin_id.strip().lower(),
+        "count": len(backups),
+        "backups": [
+            {
+                "name": path.name,
+                "path": str(path),
+            }
+            for path in backups
+        ],
+    }
+
+
+@router.post(
+    "/{plugin_id}/rollback/{backup_name}",
+    dependencies=WRITE_DEPENDENCIES,
+)
+def rollback_plugin_endpoint(
+    plugin_id: str,
+    backup_name: str,
+) -> dict[str, Any]:
+    try:
+        backup_path = plugin_installer.resolve_backup(
+            plugin_id=plugin_id,
+            backup_name=backup_name,
+        )
+        install_path = plugin_installer.rollback(
+            plugin_id=plugin_id,
+            backup_path=backup_path,
+        )
+        _refresh_plugins()
+
+        record = plugin_manager.registry.get(plugin_id)
+
+        return {
+            "status": "restored",
+            "plugin_id": plugin_id.strip().lower(),
+            "install_path": str(install_path),
+            "plugin": (
+                plugin_record_to_dict(record)
+                if record is not None
+                else None
+            ),
+        }
+    except PluginInstallError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc

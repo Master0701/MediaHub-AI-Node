@@ -1,4 +1,4 @@
-"""Kontrollierte Installation, Backup und Rollback für AI-Plugins."""
+"""Kontrollierte Installation, Backup, Entfernung und Rollback für AI-Plugins."""
 
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from app.plugins.package_validator import (
 
 
 class PluginInstallError(PluginError):
-    """Ein Plugin konnte nicht sicher installiert werden."""
+    """Ein Plugin konnte nicht sicher verwaltet werden."""
 
 
 @dataclass(frozen=True, slots=True)
@@ -32,8 +32,17 @@ class PluginInstallResult:
     replaced_existing: bool
 
 
+@dataclass(frozen=True, slots=True)
+class PluginRemoveResult:
+    """Ergebnis einer kontrollierten Plugin-Entfernung."""
+
+    plugin_id: str
+    removed_path: Path
+    backup_path: Path | None
+
+
 class PluginInstaller:
-    """Installiert geprüfte Plugin-Pakete mit Backup und Rollback."""
+    """Installiert, entfernt und restauriert Plugins mit Backup."""
 
     def __init__(
         self,
@@ -50,8 +59,6 @@ class PluginInstaller:
         *,
         expected_sha256: str | None = None,
     ) -> PluginInstallResult:
-        """Validiert und installiert ein Plugin atomar."""
-
         package = validate_plugin_package(
             archive_path,
             expected_sha256=expected_sha256,
@@ -63,7 +70,6 @@ class PluginInstaller:
         install_path = (
             self.plugin_root / package.manifest.plugin_id
         ).resolve()
-
         self._ensure_inside_root(install_path, self.plugin_root)
 
         replaced_existing = install_path.exists()
@@ -82,7 +88,6 @@ class PluginInstaller:
                 self.plugin_root
                 / f".{package.manifest.plugin_id}.installing"
             ).resolve()
-
             self._ensure_inside_root(staged_path, self.plugin_root)
 
             if staged_path.exists():
@@ -119,14 +124,50 @@ class PluginInstaller:
             replaced_existing=replaced_existing,
         )
 
+    def remove(
+        self,
+        plugin_id: str,
+        *,
+        create_backup: bool = True,
+    ) -> PluginRemoveResult:
+        """Entfernt ein Plugin optional nach vorherigem Backup."""
+
+        normalized_id = plugin_id.strip().lower()
+        install_path = (self.plugin_root / normalized_id).resolve()
+        self._ensure_inside_root(install_path, self.plugin_root)
+
+        if not install_path.is_dir():
+            raise PluginInstallError(
+                f"Plugin nicht installiert: {normalized_id}"
+            )
+
+        backup_path = None
+        if create_backup:
+            self.backup_root.mkdir(parents=True, exist_ok=True)
+            backup_path = self._create_backup(
+                normalized_id,
+                install_path,
+            )
+
+        try:
+            shutil.rmtree(install_path)
+        except OSError as exc:
+            raise PluginInstallError(
+                f"Plugin '{normalized_id}' konnte nicht entfernt werden: {exc}"
+            ) from exc
+
+        return PluginRemoveResult(
+            plugin_id=normalized_id,
+            removed_path=install_path,
+            backup_path=backup_path,
+        )
+
     def rollback(
         self,
         *,
         plugin_id: str,
         backup_path: Path,
     ) -> Path:
-        """Stellt ein zuvor gesichertes Plugin wieder her."""
-
         normalized_id = plugin_id.strip().lower()
         install_path = (self.plugin_root / normalized_id).resolve()
         resolved_backup = backup_path.resolve()
@@ -162,8 +203,6 @@ class PluginInstaller:
         return install_path
 
     def list_backups(self, plugin_id: str) -> tuple[Path, ...]:
-        """Listet vorhandene Backups eines Plugins, neueste zuerst."""
-
         normalized_id = plugin_id.strip().lower()
         plugin_backup_root = (
             self.backup_root / normalized_id
@@ -184,6 +223,26 @@ class PluginInstaller:
                 reverse=True,
             )
         )
+
+    def resolve_backup(
+        self,
+        *,
+        plugin_id: str,
+        backup_name: str,
+    ) -> Path:
+        """Löst einen Backup-Namen sicher innerhalb des Plugin-Ordners auf."""
+
+        normalized_id = plugin_id.strip().lower()
+        normalized_backup = backup_name.strip()
+
+        if not normalized_backup or "/" in normalized_backup or "\\" in normalized_backup:
+            raise PluginInstallError("Ungültiger Backup-Name.")
+
+        backup_path = (
+            self.backup_root / normalized_id / normalized_backup
+        ).resolve()
+        self._ensure_inside_root(backup_path, self.backup_root)
+        return backup_path
 
     def _extract_to_temporary(
         self,
