@@ -11,8 +11,8 @@ from app.api.cache import router as cache_router
 from app.api.jobs import router as jobs_router
 from app.api.knowledge import router as knowledge_router
 from app.api.knowledge_import import router as knowledge_import_router
-from app.api.plugins import router as plugins_router
 from app.api.plugin_plans import router as plugin_plans_router
+from app.api.plugins import router as plugins_router
 from app.api.providers import router as providers_router
 from app.api.quality import router as quality_router
 from app.api.references import router as references_router
