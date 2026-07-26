@@ -1,85 +1,54 @@
 # MediaHub-AI-Node
 
-**MediaHub-AI-Node** ist ein lokaler KI-, Wissens- und Medienanalyse-Knoten für
-Raspberry Pi und andere Linux-Systeme. Der Dienst stellt eine REST-API für
-MediaHub, MediaHub-Plugins und weitere Clients im Heimnetz bereit.
+**MediaHub-AI-Node** ist ein optionaler lokaler KI-, Wissens- und Medienanalyse-Knoten für Raspberry Pi und andere Linux-Systeme.
 
-> **Projektstatus:** frühe, funktionsfähige Entwicklungsfassung  
-> **Aktuelle Version:** 0.7.1  
-> **Primäre Zielplattform:** Raspberry Pi 5 mit 64-Bit-Linux
+> **Projektstatus:** funktionsfähige Entwicklungsfassung
+> **Primäre Zielplattform:** Raspberry Pi 5 mit Raspberry Pi OS 64-Bit
+> **Getestete Basis:** Debian 13 „Trixie“, systemd und Python 3.13
 
-## Hauptfunktionen
+## Rolle im MediaHub-System
 
-- lokale REST-API auf Basis von FastAPI
-- Betrieb als systemd-Dienst
-- Health- und Systemstatus
-- Wissensdatenbank für Filme, Serien und spätere Medientypen
-- Titel-, Alias- und externe-ID-Erkennung
-- Dublettenerkennung und Zusammenführung von Einträgen
-- Beziehungen wie Franchise, Fortsetzung, Prequel, Spin-off und Crossover
-- Aufgabenwarteschlange und Cache-Grundlage
-- Provider-Schicht für lokale, Raspberry-Pi- und optionale Cloud-Backends
-- Backup-, Wiederherstellungs- und Wartungsfunktionen
+Die interne MediaHub-KI bleibt die zentrale Orchestrierungs- und Entscheidungsinstanz. Der Raspberry-Pi-AI-Node ist nur ein optionaler zusätzlicher Ausführungsknoten. Ist er nicht vorhanden oder offline, übernimmt die interne MediaHub-KI die Aufgaben lokal, soweit die benötigten Werkzeuge verfügbar sind.
 
-## Zielarchitektur
+Nur die interne MediaHub-KI muss das Desktopprogramm selbst steuern. Analyse-, Provider-, OCR-, Audio-, Fingerprint- und ähnliche Funktionen sollen auf beiden Seiten möglichst gleich nutzbar sein.
 
-Der AI-Node bleibt als eigenständiger Dienst nutzbar. MediaHub ist der erste
-vorgesehene Client, aber nicht die einzige mögliche Anwendung. Die API wird
-deshalb allgemein, modular und erweiterbar aufgebaut.
+## Getestete Plattform
 
-Geplante Anbindungen umfassen unter anderem:
+- Raspberry Pi 5
+- Raspberry Pi OS 64-Bit
+- Debian 13 „Trixie“
+- ARM64 / aarch64
+- systemd
+- Python 3.13
+- SSD-Installation unter `/opt/mediahub`
+- REST-API auf Port `8765`
 
-- MediaHub
-- MediaHub WebRemote
-- MediaHub Mobile Dashboard
-- MediaHub Metadata Editor
-- MediaHub-KI-Assistent
-- MediaHub Renamer
-- MediaHub Hörbuchverwaltung
-- MediaHub Cut & Merge
-- zukünftige externe Clients
-
-## Schnellstart
-
-```bash
-cd /opt/mediahub/ai-node
-source /opt/mediahub/venv/bin/activate
-pip install -r requirements.txt
-uvicorn app.main:app --host 0.0.0.0 --port 8765
-```
-
-Health-Check:
-
-```bash
-curl -sS http://127.0.0.1:8765/health | python -m json.tool
-```
-
-API-Dokumentation:
-
-```text
-http://127.0.0.1:8765/docs
-```
+Der Installer setzt derzeit ein Debian-basiertes System mit `apt` und `systemd` voraus. Andere Debian-13- und Ubuntu-Systeme können funktionieren, wurden aber noch nicht vollständig getestet.
 
 ## Installation
+
+```bash
+sudo ./install.sh
+```
+
+Der Installer verwendet einen frei wählbaren Linux-Benutzer, schlägt standardmäßig `mediahub` vor, erzeugt ein sicheres API-Token, richtet Verzeichnisse und Rechte ein, installiert den systemd-Dienst und prüft Health- sowie geschützten Plugin-Zugriff.
 
 - [Raspberry Pi vorbereiten](docs/RASPBERRY_PI_SETUP.md)
 - [Installation](docs/INSTALLATION.md)
 - [systemd-Dienst](docs/SYSTEMD_SERVICE.md)
-- [Update](docs/UPDATE.md)
-- [Deinstallation](docs/UNINSTALL.md)
+- [Release-Checkliste](RELEASE_CHECKLIST.md)
 
-## Betrieb und Entwicklung
+## Automatische Installation durch MediaHub
 
-- [AI-Node-Handbuch](docs/AI_NODE_GUIDE.md)
-- [API](docs/API.md)
-- [Wissensdatenbank](docs/KNOWLEDGE_DATABASE.md)
-- [Backup und Wiederherstellung](docs/BACKUP_AND_RESTORE.md)
-- [Wartung](docs/MAINTENANCE.md)
-- [Fehlerbehebung](docs/TROUBLESHOOTING.md)
-- [Sicherheit](SECURITY.md)
-- [Mitwirken](CONTRIBUTING.md)
+Die vollständige automatische Installation aus MediaHub wird vorbereitet. MediaHub soll künftig bei Auswahl eines AI-Plugins prüfen, ob ein AI-Node vorhanden ist, bei Bedarf SSH-Daten abfragen, den Node installieren, das erzeugte Token übernehmen und danach das ausgewählte `.mhaiplugin` installieren.
 
-## Tests und Release-Prüfung
+Das SSH-Passwort wird nicht dauerhaft gespeichert.
+
+## Werkzeug- und Abhängigkeitsverwaltung
+
+MediaHub und AI-Node sollen eine gemeinsame Werkzeugverwaltung verwenden. Plugins melden benötigte Werkzeuge und Pakete an. Gemeinsam genutzte Werkzeuge werden referenzgezählt und erst entfernt, wenn kein Plugin sie mehr benötigt.
+
+## Tests
 
 ```bash
 python -m pytest
@@ -87,14 +56,6 @@ python -m ruff check .
 python release.py
 ```
 
-`release.py` prüft Syntax, Tests und Ruff und erstellt danach das Release-ZIP
-sowie die zugehörige SHA-256-Datei.
-
 ## Lizenz
 
-MediaHub-AI-Node wird unter der MIT-Lizenz veröffentlicht. Drittanbieter-
-Komponenten behalten ihre jeweiligen Lizenzen und Urheberrechte.
-
-- [LICENSE](LICENSE)
-- [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md)
-- [`licenses/`](licenses/)
+MIT-Lizenz. Drittanbieter-Komponenten behalten ihre jeweiligen Lizenzen.

@@ -1,14 +1,22 @@
 # Raspberry Pi vorbereiten
 
-## Voraussetzungen
+## Getestetes System
 
 - Raspberry Pi 5
-- 64-Bit Raspberry Pi OS oder kompatibles Debian-Linux
-- Netzwerkzugriff im Heimnetz
-- ausreichend freier Speicher
-- Benutzer `mediahub` mit passenden Rechten
+- Raspberry Pi OS 64-Bit
+- Debian 13 „Trixie“
+- ARM64 / aarch64
+- systemd
+- Python 3.13
+- SSD
 
-## System aktualisieren
+## Linux-Benutzer
+
+Empfohlener Standard: `mediahub`.
+
+Der Installer kann auch einen vorhandenen anderen Benutzer verwenden oder einen neuen Benutzer anlegen. Der gewählte Benutzer wird im systemd-Dienst eingetragen und erhält die nötigen Rechte.
+
+## Vorbereitung
 
 ```bash
 sudo apt update
@@ -16,21 +24,14 @@ sudo apt full-upgrade -y
 sudo reboot
 ```
 
-## Grundpakete installieren
+Danach Repository klonen und installieren:
 
 ```bash
-sudo apt install -y git python3 python3-venv python3-pip unzip curl
+git clone https://github.com/Master0701/MediaHub-AI-Node.git
+cd MediaHub-AI-Node
+sudo ./install.sh
 ```
 
-## Verzeichnisse vorbereiten
+## Sicherheit
 
-```bash
-sudo mkdir -p /opt/mediahub/ai-node
-sudo chown -R mediahub:mediahub /opt/mediahub
-```
-
-## Hinweise
-
-Der Dienst ist zunächst für das lokale Heimnetz vorgesehen. Eine öffentliche
-Freigabe sollte erst nach Einrichtung von Authentifizierung, Firewall und
-verschlüsselter Verbindung erfolgen.
+Schreibende API-Endpunkte werden durch `MEDIAHUB_AI_NODE_API_TOKEN` geschützt. Das Token liegt in `/opt/mediahub/ai-node/.env`.

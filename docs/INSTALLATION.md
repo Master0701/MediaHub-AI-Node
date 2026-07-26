@@ -1,49 +1,68 @@
 # Installation
 
-## Variante A: Installation über Git
+## Getestete Plattform
+
+- Raspberry Pi 5
+- Raspberry Pi OS 64-Bit
+- Debian 13 „Trixie“
+- ARM64 / aarch64
+- systemd
+- Python 3.13
+- SSD-Installation unter `/opt/mediahub`
+
+Der Installer setzt derzeit `apt` und `systemd` voraus.
+
+## Empfohlene Installation
 
 ```bash
-cd /opt/mediahub
-git clone https://github.com/Master0701/MediaHub-AI-Node.git ai-node
-cd ai-node
-
-python3 -m venv /opt/mediahub/venv
-source /opt/mediahub/venv/bin/activate
-python -m pip install --upgrade pip
-pip install -r requirements.txt
+sudo ./install.sh
 ```
 
-Datenbank vorbereiten, sofern erforderlich:
+Der Installer fragt nach dem Linux-Benutzer. Standard ist `mediahub`; ein vorhandener anderer Benutzer kann ebenfalls verwendet oder auf Wunsch neu angelegt werden.
+
+Automatisch erledigt werden:
+
+- Systempakete und Python-Umgebung
+- Abhängigkeiten
+- Laufzeitverzeichnisse
+- `.env` und `MEDIAHUB_AI_NODE_API_TOKEN`
+- Rechte und Eigentümer
+- systemd-Dienst
+- Health- und geschützter API-Test
+
+Nicht interaktiv:
 
 ```bash
-python init_database.py
+sudo MEDIAHUB_NONINTERACTIVE=1 MEDIAHUB_USER=mediahub ./install.sh
 ```
 
-Teststart:
+Mit anderem Benutzer:
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 8765
+sudo MEDIAHUB_NONINTERACTIVE=1 MEDIAHUB_USER=matthias ./install.sh
 ```
 
-## Variante B: Installation über Release-ZIP
-
-1. Das passende Release-ZIP und die SHA-256-Datei herunterladen.
-2. Prüfsumme kontrollieren.
-3. ZIP nach `/opt/mediahub/ai-node` entpacken.
-4. Python-Umgebung und Abhängigkeiten installieren.
-
-Beispiel:
+## Installation über Git
 
 ```bash
-sha256sum -c MediaHub-AI-Node_v0.7.1.zip.sha256
-sudo mkdir -p /opt/mediahub/ai-node
-sudo unzip -o MediaHub-AI-Node_v0.7.1.zip -d /opt/mediahub/ai-node
-sudo chown -R mediahub:mediahub /opt/mediahub/ai-node
-
-cd /opt/mediahub/ai-node
-python3 -m venv /opt/mediahub/venv
-source /opt/mediahub/venv/bin/activate
-pip install -r requirements.txt
+git clone https://github.com/Master0701/MediaHub-AI-Node.git
+cd MediaHub-AI-Node
+sudo ./install.sh
 ```
 
-Danach den systemd-Dienst nach der Anleitung in `SYSTEMD_SERVICE.md` einrichten.
+## Installation über Release-ZIP
+
+```bash
+sha256sum -c MediaHub-AI-Node_vVERSION.zip.sha256
+unzip MediaHub-AI-Node_vVERSION.zip
+cd MediaHub-AI-Node_vVERSION
+sudo ./install.sh
+```
+
+## API-Token
+
+Das Token wird in `/opt/mediahub/ai-node/.env` gespeichert. Die Datei erhält Modus `600` und gehört dem gewählten AI-Node-Benutzer.
+
+## Automatische Installation aus MediaHub
+
+MediaHub soll künftig den Node über SSH installieren, das Token übernehmen, den Node prüfen und danach das ausgewählte `.mhaiplugin` installieren. Das SSH-Passwort wird nicht gespeichert.
