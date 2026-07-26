@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.8.17
+
+- Windows-Entwicklungsinstallation korrigiert: `uvloop` wird unter Windows automatisch übersprungen.
+- Provider-System und AI-Plugin-Engine weiter stabilisiert.
+- Geschützte Plugin-API mit API-Token-Unterstützung ergänzt.
+- `.mhaiplugin`-Pakete mit Pflichtdateien, Paketprüfung und Lizenzprüfung unterstützt.
+- Installationspläne, Preflight-Prüfung, Bestätigung und kontrollierte Ausführung ergänzt.
+- Persistenten Planspeicher und Plugin-Verwaltungsendpunkte erweitert.
+- Laufzeitpfade konsequent auf `/opt/mediahub/ai-node` umgestellt.
+- Installer für Debian 13 „Trixie“ und Raspberry Pi OS 64-Bit vervollständigt.
+- Systemweiten Uninstaller mit vollständigem Test-Reset ergänzt.
+- Health-Endpunkt um Pluginzahlen und Systemstatus erweitert.
+- 79 automatisierte Tests erfolgreich ausgeführt.
+- Zahlreiche Stabilitäts-, Token-, Pfad- und Installationskorrekturen.
+
 Alle wesentlichen Änderungen an MediaHub-AI-Node werden in dieser Datei dokumentiert.
 
 ## [Unreleased]

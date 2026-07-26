@@ -3,7 +3,6 @@ from pathlib import Path
 
 from app.version import APP_NAME, APP_VERSION  # noqa: F401
 
-
 BASE_DIR = Path(
     os.getenv(
         "MEDIAHUB_BASE_DIR",

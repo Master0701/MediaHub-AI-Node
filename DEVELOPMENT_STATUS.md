@@ -1,59 +1,34 @@
-# MediaHub-AI-Node – Entwicklungsstand
+# Entwicklungsstatus MediaHub-AI-Node v0.8.17
 
-## Pausenstand
+## Aktueller stabiler Stand
 
-Stand: v0.8.16  
-Status: stabiler Entwicklungszwischenstand
+- Version: **0.8.17**
+- Zielplattform: Raspberry Pi 5
+- Getestete Basis: Debian 13 „Trixie“ / Raspberry Pi OS 64-Bit
+- Python: 3.13
+- systemd-Dienst: erfolgreich getestet
+- Automatische Installation über MediaHub: erfolgreich getestet
+- Vollständige Deinstallation: erfolgreich getestet
+- Automatisierte Tests: **79 bestanden**
+- Ruff: funktional sauber; ein Importformat-Hinweis in `app/config.py` ist noch separat zu bereinigen
 
-## Fertig
+## Enthaltene Grundlagen
 
-- Provider-System für mehrere KI-Backends
-- Provider-Prioritäten und Fallback
+- Provider-System
 - AI-Plugin-Engine
-- Plugin-Manifeste und Plugin-Typen
-- Plugin-Erkennung und Aktivierungsstatus
-- schreibgeschützte Plugin-API
-- geschützte Plugin-Installations-API
-- Aktivieren und Deaktivieren über API
-- Deinstallation mit Backup
-- Plugin-Rollback über API
-- SHA-256-Paketprüfung
-- sichere ZIP-Pfadprüfung
-- API-Token-Schutz
-- Lizenzprüfung
-- Python-Abhängigkeitsprüfung
-- externe Tool-Prüfung
-- Plugin-Abhängigkeitsprüfung
-- bestätigungspflichtige Installationspläne
-- Plan-ID und einmalige Bestätigung
-- persistenter Plan-Speicher
-- kontrollierte Ausführung geprüfter Python-Pakete
-- automatisierte Tests
+- geschützte Plugin-API
+- `.mhaiplugin`-Unterstützung
+- Paket-, Lizenz- und Abhängigkeitsprüfung
+- Installationsplan und Preflight-Prüfung
+- Plan-Bestätigung und kontrollierte Ausführung
+- persistenter Planspeicher
+- Health- und Systemstatus
+- Installer und systemweiter Uninstaller
 
-## Aktueller Teststand
+## Nächste geplante Schritte
 
-- 79 Tests bestanden
-- Ruff-Prüfung bestanden
-- eine bekannte externe Starlette/httpx-Warnung
-
-## Noch offen
-
-- vollständige Plugin-Transaktionen
-- automatisches Rollback nach fehlgeschlagenen Installationen
-- kontrollierte Installation externer Systemtools
-- automatische Installation abhängiger AI-Plugins
-- dev_build.py
-- Release-Vorbereitung
-- Integration des AI-Plugin-Stores in MediaHub
-- getrennte Reiter „MediaHub-Plugins“ und „AI-Plugins“ in MediaHub
-
-## Fortsetzung
-
-Beim nächsten Start zuerst ausführen:
-
-```bash
-source /opt/mediahub/venv/bin/activate
-cd /opt/mediahub/ai-node
-git pull --ff-only origin main
-python -m pytest
-python -m ruff check .
+- Release v0.8.17 veröffentlichen
+- Ruff-Importhinweis in `app/config.py` bereinigen
+- Rollback und Transaktionen weiter ausbauen
+- Update-System vervollständigen
+- erste produktive AI-Plugins und Analyseaufgaben ergänzen

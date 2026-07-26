@@ -60,3 +60,16 @@ python release.py
 ## Lizenz
 
 MIT-Lizenz. Drittanbieter-Komponenten behalten ihre jeweiligen Lizenzen.
+
+## Entwicklung unter Windows
+
+Für Tests und den Release-Bau kann das Repository auch unter Windows verwendet
+werden. `uvloop` ist nur für Linux und vergleichbare Unix-Systeme vorgesehen
+und wird durch einen Plattformmarker unter Windows automatisch übersprungen.
+
+```powershell
+python -m pip install -r requirements.txt
+python -m pip install pytest==9.1.1 ruff
+python -m pytest
+python -m ruff check .
+```
