@@ -15,6 +15,12 @@ DEFAULT_MAX_ARCHIVE_SIZE = 512 * 1024 * 1024
 DEFAULT_MAX_UNCOMPRESSED_SIZE = 2 * 1024 * 1024 * 1024
 DEFAULT_MAX_FILE_COUNT = 5000
 
+REQUIRED_ROOT_FILES = {
+    "README.md",
+    "CHANGELOG.md",
+    "requirements.txt",
+}
+
 
 class PluginPackageError(PluginError):
     """Ein Plugin-Paket ist beschädigt oder unsicher."""
@@ -105,6 +111,31 @@ def validate_plugin_package(
             manifest_name = (
                 PurePosixPath(root_directory) / "plugin.json"
             )
+
+            archive_names = {
+                PurePosixPath(name)
+                for name in archive.namelist()
+                if not name.endswith("/")
+            }
+
+            if manifest_name not in archive_names:
+                raise PluginPackageError(
+                    "Im obersten Plugin-Ordner fehlt plugin.json."
+                )
+
+            missing_files = sorted(
+                filename
+                for filename in REQUIRED_ROOT_FILES
+                if (
+                    PurePosixPath(root_directory) / filename
+                ) not in archive_names
+            )
+
+            if missing_files:
+                raise PluginPackageError(
+                    "Im obersten Plugin-Ordner fehlen Pflichtdateien: "
+                    + ", ".join(missing_files)
+                )
 
             try:
                 manifest_data = archive.read(str(manifest_name))

@@ -53,11 +53,20 @@ def create_package(
                 "MIT License\n",
             )
 
-        if requirements is not None:
-            archive.writestr(
-                "provider.preflight-api/requirements.txt",
-                requirements,
-            )
+        archive.writestr(
+            "provider.preflight-api/requirements.txt",
+            requirements
+            if requirements is not None
+            else "# Keine zusätzlichen Python-Abhängigkeiten.\n",
+        )
+        archive.writestr(
+            "provider.preflight-api/README.md",
+            "# Testplugin\n",
+        )
+        archive.writestr(
+            "provider.preflight-api/CHANGELOG.md",
+            "# Changelog\n\n## v1.0.0\n\n- Testversion\n",
+        )
 
     return path.read_bytes()
 

@@ -39,6 +39,18 @@ def create_package(
         )
 
 
+        archive.writestr(
+            "provider.test/README.md",
+            "# Testplugin\n",
+        )
+        archive.writestr(
+            "provider.test/CHANGELOG.md",
+            "# Changelog\n\n## v1.0.0\n\n- Testversion\n",
+        )
+        archive.writestr(
+            "provider.test/requirements.txt",
+            "# Keine zusätzlichen Python-Abhängigkeiten.\n",
+        )
 def test_fresh_install(tmp_path: Path) -> None:
     archive_path = tmp_path / "plugin.zip"
     create_package(

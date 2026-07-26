@@ -90,10 +90,10 @@ async def create_plugin_install_plan_endpoint(
         )
 
     suffix = Path(x_plugin_filename or "plugin.zip").suffix.lower()
-    if suffix != ".zip":
+    if suffix not in {".zip", ".mhaiplugin"}:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Nur ZIP-Pakete sind erlaubt.",
+            detail="Nur ZIP- oder MHAI-Plugin-Pakete sind erlaubt.",
         )
 
     temporary_path: Path | None = None

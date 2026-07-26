@@ -50,6 +50,18 @@ def create_plugin_zip(
             "MIT License\n",
         )
 
+        archive.writestr(
+            "provider.manage-test/README.md",
+            "# Testplugin\n",
+        )
+        archive.writestr(
+            "provider.manage-test/CHANGELOG.md",
+            "# Changelog\n\n## v1.0.0\n\n- Testversion\n",
+        )
+        archive.writestr(
+            "provider.manage-test/requirements.txt",
+            "# Keine zusätzlichen Python-Abhängigkeiten.\n",
+        )
     return path.read_bytes()
 
 

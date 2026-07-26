@@ -46,6 +46,18 @@ def create_package(path: Path) -> bytes:
             "MIT License\n",
         )
 
+        archive.writestr(
+            "provider.confirm-test/README.md",
+            "# Testplugin\n",
+        )
+        archive.writestr(
+            "provider.confirm-test/CHANGELOG.md",
+            "# Changelog\n\n## v1.0.0\n\n- Testversion\n",
+        )
+        archive.writestr(
+            "provider.confirm-test/requirements.txt",
+            "# Keine zusätzlichen Python-Abhängigkeiten.\n",
+        )
     return path.read_bytes()
 
 

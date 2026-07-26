@@ -49,11 +49,20 @@ def create_package(
                 "MIT License\n",
             )
 
-        if requirements is not None:
-            archive.writestr(
-                "provider.preflight/requirements.txt",
-                requirements,
-            )
+        archive.writestr(
+            "provider.preflight/requirements.txt",
+            requirements
+            if requirements is not None
+            else "# Keine zusätzlichen Python-Abhängigkeiten.\n",
+        )
+        archive.writestr(
+            "provider.preflight/README.md",
+            "# Testplugin\n",
+        )
+        archive.writestr(
+            "provider.preflight/CHANGELOG.md",
+            "# Changelog\n\n## v1.0.0\n\n- Testversion\n",
+        )
 
 
 def test_valid_package_without_requirements(
@@ -67,7 +76,7 @@ def test_valid_package_without_requirements(
 
     assert result.ready is True
     assert result.license_present is True
-    assert result.warnings
+    assert result.warnings == ()
 
 
 def test_missing_license_is_rejected(

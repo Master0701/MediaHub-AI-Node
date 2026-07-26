@@ -89,9 +89,11 @@ class PluginPreflightChecker:
                 archive,
                 package.root_directory,
             )
-            requirements = self._read_requirements(
-                archive,
-                package.root_directory,
+            requirements_present, requirements = (
+                self._read_requirements(
+                    archive,
+                    package.root_directory,
+                )
             )
 
         python_checks = tuple(
@@ -123,7 +125,7 @@ class PluginPreflightChecker:
         warnings: list[str] = []
         if not license_present:
             warnings.append("Im Plugin-Paket fehlt eine Lizenzdatei.")
-        if not requirements:
+        if not requirements_present:
             warnings.append(
                 "Keine requirements.txt vorhanden; "
                 "es werden keine Python-Abhängigkeiten geprüft."
@@ -206,13 +208,13 @@ class PluginPreflightChecker:
     def _read_requirements(
         archive: ZipFile,
         root_directory: str,
-    ) -> tuple[str, ...]:
+    ) -> tuple[bool, tuple[str, ...]]:
         name = f"{root_directory}/requirements.txt"
 
         try:
             raw = archive.read(name).decode("utf-8")
         except KeyError:
-            return ()
+            return False, ()
 
         requirements: list[str] = []
 
@@ -229,7 +231,7 @@ class PluginPreflightChecker:
 
             requirements.append(line)
 
-        return tuple(requirements)
+        return True, tuple(requirements)
 
     @staticmethod
     def _check_python_requirement(
