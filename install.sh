@@ -84,6 +84,8 @@ chmod +x "$PROJECT_DIR/install.sh" "$PROJECT_DIR/scripts/"*.sh 2>/dev/null || tr
 
 MEDIAHUB_USER="$MEDIAHUB_USER" MEDIAHUB_GROUP="$MEDIAHUB_GROUP" PROJECT_DIR="$PROJECT_DIR" VENV_DIR="$VENV_DIR" SERVICE_NAME="$SERVICE_NAME" API_PORT="$API_PORT"     "$PROJECT_DIR/scripts/install_service.sh"
 
+
+PROJECT_DIR="$PROJECT_DIR" "$PROJECT_DIR/scripts/install_uninstaller.sh"
 for _ in $(seq 1 30); do
     curl -fsS "http://127.0.0.1:${API_PORT}/health" >/dev/null 2>&1 && break
     sleep 1

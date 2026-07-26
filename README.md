@@ -36,6 +36,7 @@ Der Installer verwendet einen frei wählbaren Linux-Benutzer, schlägt standardm
 - [Raspberry Pi vorbereiten](docs/RASPBERRY_PI_SETUP.md)
 - [Installation](docs/INSTALLATION.md)
 - [systemd-Dienst](docs/SYSTEMD_SERVICE.md)
+- [Deinstallation](docs/UNINSTALL.md)
 - [Release-Checkliste](RELEASE_CHECKLIST.md)
 
 ## Automatische Installation durch MediaHub

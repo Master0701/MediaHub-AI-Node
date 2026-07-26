@@ -53,3 +53,12 @@
 - [ ] Release-Beschreibung korrekt
 - [ ] Installationshinweise sichtbar
 - [ ] ZIP und SHA-256 vorhanden
+
+## Deinstallation
+- [ ] Systemweiter Uninstaller wurde installiert
+- [ ] Normale Deinstallation getestet
+- [ ] Datensicherung bei Deinstallation getestet
+- [ ] `--purge --remove-venv --yes` getestet
+- [ ] Dienstdatei und Drop-ins wurden entfernt
+- [ ] Port 8765 ist nach Deinstallation frei
+- [ ] Linux-Benutzer blieb erhalten

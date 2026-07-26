@@ -1,26 +1,66 @@
-# Deinstallation
+# MediaHub-AI-Node deinstallieren
 
-## Dienst stoppen und deaktivieren
+Der Uninstaller ist Bestandteil des GitHub-Repositories und wird bei der
+Installation zusätzlich systemweit eingerichtet:
 
-```bash
-sudo systemctl stop mediahub-ai-node
-sudo systemctl disable mediahub-ai-node
+```text
+/usr/local/sbin/mediahub-ai-node-uninstall
 ```
 
-## Dienstdatei entfernen
+Dadurch kann er den Projektordner und die virtuelle Python-Umgebung entfernen,
+ohne sich selbst vorher zu löschen.
+
+## Normale Deinstallation
 
 ```bash
-sudo rm -f /etc/systemd/system/mediahub-ai-node.service
-sudo systemctl daemon-reload
+sudo mediahub-ai-node-uninstall
 ```
 
-## Programmdateien entfernen
+Der Uninstaller:
 
-Vorher bei Bedarf Datenbank, Konfiguration und Backups sichern.
+- stoppt und deaktiviert den systemd-Dienst,
+- entfernt Dienstdatei und Drop-ins,
+- führt `systemctl daemon-reload` aus,
+- entfernt `/opt/mediahub/ai-node`,
+- kann Daten, Modelle und Backups vorher sichern,
+- lässt `/opt/mediahub/venv` standardmäßig bestehen,
+- löscht den verwendeten Linux-Benutzer nicht,
+- prüft am Ende Dienst, Projektordner und Port 8765.
+
+## Vollständiger Test-Reset
+
+Für einen neuen automatischen Installationstest:
 
 ```bash
-sudo rm -rf /opt/mediahub/ai-node
+sudo mediahub-ai-node-uninstall --purge --remove-venv --yes
 ```
 
-Die gemeinsam verwendete virtuelle Umgebung `/opt/mediahub/venv` nur löschen,
-wenn sie von keiner anderen MediaHub-Komponente mehr verwendet wird.
+Dabei werden entfernt:
+
+```text
+/etc/systemd/system/mediahub-ai-node.service
+/etc/systemd/system/mediahub-ai-node.service.d/
+/opt/mediahub/ai-node
+/opt/mediahub/venv
+/usr/local/sbin/mediahub-ai-node-uninstall
+```
+
+Der Linux-Benutzer bleibt erhalten.
+
+## Daten behalten
+
+Ohne `--purge` fragt der Uninstaller, ob folgende Inhalte gesichert werden
+sollen:
+
+```text
+data/
+backups/
+models/
+.env
+```
+
+Die Sicherung wird unter einem Zeitstempelordner abgelegt:
+
+```text
+/opt/mediahub/ai-node-preserved-YYYYMMDD-HHMMSS
+```
