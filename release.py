@@ -212,6 +212,11 @@ def main() -> int:
         check_required_files()
 
         run_check(
+            [sys.executable, "scripts/check_third_party_licenses.py"],
+            "Drittanbieter-Lizenzen prüfen",
+        )
+
+        run_check(
             [sys.executable, "-m", "compileall", "-q", "app", "tests"],
             "Python-Syntax prüfen",
         )

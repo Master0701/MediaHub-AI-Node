@@ -1,0 +1,195 @@
+{
+  "aiosqlite": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "annotated-doc": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "annotated-types": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "anyio": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "certifi": {
+    "license": "MPL-2.0",
+    "license_files": [
+      "MPL-2.0.txt"
+    ]
+  },
+  "click": {
+    "license": "BSD-3-Clause",
+    "license_files": [
+      "BSD-3-Clause.txt"
+    ]
+  },
+  "fastapi": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "greenlet": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "h11": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "httpcore": {
+    "license": "BSD-3-Clause",
+    "license_files": [
+      "BSD-3-Clause.txt"
+    ]
+  },
+  "httptools": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "httpx": {
+    "license": "BSD-3-Clause",
+    "license_files": [
+      "BSD-3-Clause.txt"
+    ]
+  },
+  "idna": {
+    "license": "BSD-3-Clause",
+    "license_files": [
+      "BSD-3-Clause.txt"
+    ]
+  },
+  "packaging": {
+    "license": "Apache-2.0 OR BSD-2-Clause",
+    "license_files": [
+      "Apache-2.0.txt",
+      "BSD-2-Clause.txt"
+    ]
+  },
+  "psutil": {
+    "license": "BSD-3-Clause",
+    "license_files": [
+      "BSD-3-Clause.txt"
+    ]
+  },
+  "pydantic": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "pydantic-settings": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "pydantic_core": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "python-dotenv": {
+    "license": "BSD-3-Clause",
+    "license_files": [
+      "BSD-3-Clause.txt"
+    ]
+  },
+  "PyYAML": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "setuptools": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "SQLAlchemy": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "starlette": {
+    "license": "BSD-3-Clause",
+    "license_files": [
+      "BSD-3-Clause.txt"
+    ]
+  },
+  "typing-inspection": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "typing_extensions": {
+    "license": "PSF-2.0",
+    "license_files": [
+      "PSF-2.0.txt"
+    ]
+  },
+  "uvicorn": {
+    "license": "BSD-3-Clause",
+    "license_files": [
+      "BSD-3-Clause.txt"
+    ]
+  },
+  "uvloop": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "watchfiles": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "websockets": {
+    "license": "BSD-3-Clause",
+    "license_files": [
+      "BSD-3-Clause.txt"
+    ]
+  },
+  "wheel": {
+    "license": "MIT",
+    "license_files": [
+      "MIT.txt"
+    ]
+  },
+  "opencv-python-headless": {
+    "license": "Apache-2.0",
+    "license_files": [
+      "Apache-2.0.txt"
+    ]
+  },
+  "ImageHash": {
+    "license": "BSD-2-Clause",
+    "license_files": [
+      "BSD-2-Clause.txt"
+    ]
+  }
+}
