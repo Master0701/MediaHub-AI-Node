@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.8.18
+
+- Vollständige Drittanbieter-Lizenzverwaltung ergänzt.
+- Direkte Python-Abhängigkeiten in `dependency_licenses.json` dokumentiert.
+- Standard-Lizenztexte unter `licenses/` ergänzt.
+- Automatische Lizenzprüfung in den Release-Prozess integriert.
+- Release bricht bei fehlenden Lizenzinformationen ab.
+
 ## v0.8.17
 
 - Windows-Entwicklungsinstallation korrigiert: `uvloop` wird unter Windows automatisch übersprungen.

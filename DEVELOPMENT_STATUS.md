@@ -1,8 +1,8 @@
-# Entwicklungsstatus MediaHub-AI-Node v0.8.17
+# Entwicklungsstatus MediaHub-AI-Node v0.8.18
 
 ## Aktueller stabiler Stand
 
-- Version: **0.8.17**
+- Version: **0.8.18**
 - Zielplattform: Raspberry Pi 5
 - Getestete Basis: Debian 13 „Trixie“ / Raspberry Pi OS 64-Bit
 - Python: 3.13
@@ -27,7 +27,7 @@
 
 ## Nächste geplante Schritte
 
-- Release v0.8.17 veröffentlichen
+- Release v0.8.18 veröffentlichen
 - Ruff-Importhinweis in `app/config.py` bereinigen
 - Rollback und Transaktionen weiter ausbauen
 - Update-System vervollständigen
