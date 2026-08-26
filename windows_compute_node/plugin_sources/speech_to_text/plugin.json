@@ -1,0 +1,29 @@
+{
+  "id": "mediahub.speech_to_text",
+  "name": "MediaHub Speech-to-Text",
+  "version": "0.1.0",
+  "plugin_type": "ai_node",
+  "entrypoint": "plugin.py",
+  "description": "Lokale Speech-to-Text-Ausfuehrung fuer MediaHub Compute Nodes.",
+  "job_types": [
+    "speech_to_text"
+  ],
+  "execution": {
+    "modes": [
+      "auto",
+      "cpu",
+      "gpu"
+    ],
+    "cpu_threads_configurable": true,
+    "accelerator_selection": true
+  },
+  "runtime": {
+    "isolated": true,
+    "engine": "faster-whisper",
+    "dependencies": [
+      "faster-whisper"
+    ],
+    "models_directory": "models",
+    "cache_directory": "cache"
+  }
+}

@@ -45,6 +45,69 @@ Der Installer verwendet auf Debian-basierten Systemen `apt` und installiert Pyth
 
 Optionale Linux-/ARM-Werkzeuge und spätere AI-Node-Plugins müssen vor Aufnahme in Installer, Tool-Katalog oder Release zusätzlich mit Hersteller, Paketquelle, Version, Plattform und Lizenz dokumentiert werden.
 
+
+
+## Windows Compute Node
+
+Der getrennte Windows Compute Node kann zusätzliche Laufzeitkomponenten
+bei Bedarf aus den offiziellen Herstellerquellen herunterladen. Diese
+Komponenten werden nicht im Git-Repository gebündelt.
+
+### Isolierte Python-Laufzeit
+
+Für das lokale Speech-to-Text-Plugin wird derzeit Python 3.12.10
+Embedded x64 für Windows verwendet.
+
+- Komponente: CPython 3.12.10 Embedded Distribution
+- Hersteller/Projekt: Python Software Foundation / Python
+- Plattform: Windows x86-64
+- Quelle: `python.org`
+- Paket: `python-3.12.10-embed-amd64.zip`
+- Lizenz: Python Software Foundation License
+- Lokaler Standard-Lizenztext: `licenses/PSF-2.0.txt`
+
+Der Download wird vom Compute Node nicht im Repository gespeichert.
+Die erwartete SHA-256-Prüfsumme ist im Provisioning-Code fest
+hinterlegt und wird vor Verwendung geprüft.
+
+### pip-Bootstrap
+
+Falls die isolierte Python-Laufzeit noch kein pip besitzt, darf
+`get-pip.py` ausschließlich per HTTPS von `bootstrap.pypa.io/get-pip.py`
+geladen werden. Die Bootstrap-Datei wird nicht im Repository gebündelt.
+
+pip und die darüber installierten Pakete behalten ihre jeweiligen
+Lizenzen und Copyright-Hinweise.
+
+### Speech-to-Text
+
+Das optionale Plugin `mediahub.speech_to_text` verwendet eine eigene,
+isolierte Python-Laufzeit und installiert seine Runtime-Abhängigkeiten
+bei Bedarf über pip.
+
+Direkt deklarierte Runtime-Abhängigkeit:
+
+| Komponente | Zweck | Lizenz |
+|---|---|---|
+| faster-whisper | Lokale Speech-to-Text-Ausführung | MIT |
+
+`faster-whisper` und seine transitiven Abhängigkeiten werden nicht im
+Git-Repository gebündelt. Vor einem Windows-Compute-Node-Release müssen
+die tatsächlich installierten Versionen und deren vollständige
+Lizenzinformationen durch die Windows-Release-Prüfung inventarisiert
+und dokumentiert werden.
+
+### GPU- und Windows-Systemwerkzeuge
+
+Der Windows Compute Node kann vorhandene Betriebssystem- bzw.
+Treiberwerkzeuge zur Hardwareerkennung verwenden, darunter PowerShell,
+Windows CIM/WMI, DXDiag und bei vorhandener NVIDIA-GPU `nvidia-smi`.
+
+Diese Werkzeuge werden nicht durch MediaHub gebündelt oder verteilt.
+Sie stammen aus Windows beziehungsweise aus der installierten
+Grafiktreiberumgebung.
+
+
 ## Release-Regel
 
 Ein Release darf nur erstellt werden, wenn jede direkte Abhängigkeit aus `requirements.txt` in `licenses/dependency_licenses.json` erfasst ist, alle referenzierten Lizenztexte vorhanden sind und der gesamte `licenses/`-Ordner zusammen mit `THIRD_PARTY_LICENSES.md` im Release enthalten ist.
