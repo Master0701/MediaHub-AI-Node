@@ -75,7 +75,7 @@ def test_runtime_base_python_rejects_unsupported_host():
             "ist auf diesem Rechner vorhanden."
         )
 
-    with pytest.raises(runtime.RuntimePythonError):
+    with pytest.raises(provider.RuntimePythonError):
         runtime.runtime_base_python()
 
 
@@ -99,7 +99,7 @@ def test_create_runtime_does_not_fallback_to_host_python(
             "ist auf diesem Rechner vorhanden."
         )
 
-    with pytest.raises(runtime.RuntimePythonError):
+    with pytest.raises(provider.RuntimePythonError):
         runtime.create_runtime(
             tmp_path
         )

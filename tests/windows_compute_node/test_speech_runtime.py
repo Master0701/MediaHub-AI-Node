@@ -4,6 +4,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 ROOT = (
     Path(__file__)
     .resolve()
@@ -64,6 +66,13 @@ def test_runtime_paths(
     )
 
 
+@pytest.mark.skipif(
+    sys.platform != "win32",
+    reason=(
+        "Managed Speech-Python provisioning "
+        "is Windows-specific."
+    ),
+)
 def test_missing_runtime_without_venv_uses_managed_python(
     tmp_path,
 ):
