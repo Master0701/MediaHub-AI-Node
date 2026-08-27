@@ -85,8 +85,7 @@ class ComputeNodeAPI:
         self.plugin_loader = (
             ComputePluginLoader(
                 plugin_root=(
-                    self.base_path
-                    / "runtime"
+                    self.runtime_dir
                     / "plugins"
                 ),
                 workers=self.workers,
