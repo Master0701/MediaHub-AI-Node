@@ -30,6 +30,11 @@ class ComputePluginLoader:
             capabilities_provider
         )
 
+        # Laufende Plugin-/Provider-Objekte bleiben
+        # ausschließlich intern. API-Ergebnisse müssen
+        # vollständig JSON-serialisierbar bleiben.
+        self.instances: dict[str, object] = {}
+
     def discover(
         self,
     ) -> list[Path]:
@@ -125,8 +130,13 @@ class ComputePluginLoader:
             or ""
         ).strip()
 
-        plugin_type = str(
+        legacy_plugin_type = str(
             manifest.get("plugin_type")
+            or ""
+        ).strip()
+
+        shared_plugin_type = str(
+            manifest.get("type")
             or ""
         ).strip()
 
@@ -145,10 +155,15 @@ class ComputePluginLoader:
                 "Plugin-Version fehlt."
             )
 
-        if plugin_type != "ai_node":
+        if legacy_plugin_type:
+            if legacy_plugin_type != "ai_node":
+                raise PluginLoadError(
+                    "plugin_type muss "
+                    "'ai_node' sein."
+                )
+        elif not shared_plugin_type:
             raise PluginLoadError(
-                "plugin_type muss "
-                "'ai_node' sein."
+                "Plugin-Typ fehlt."
             )
 
         if not entrypoint:
@@ -156,8 +171,24 @@ class ComputePluginLoader:
                 "entrypoint fehlt."
             )
 
+        if ":" in entrypoint:
+            entry_module, entry_object = (
+                entrypoint.split(":", 1)
+            )
+        else:
+            entry_module = entrypoint
+            entry_object = ""
+
+        if entry_module.endswith(".py"):
+            entry_relative = entry_module
+        else:
+            entry_relative = (
+                entry_module.replace(".", "/")
+                + ".py"
+            )
+
         entry_file = (
-            plugin_dir / entrypoint
+            plugin_dir / entry_relative
         ).resolve()
 
         plugin_root = (
@@ -214,18 +245,6 @@ class ComputePluginLoader:
 
         spec.loader.exec_module(module)
 
-        register = getattr(
-            module,
-            "register",
-            None,
-        )
-
-        if not callable(register):
-            raise PluginLoadError(
-                "Entrypoint benoetigt "
-                "register(context)."
-            )
-
         before = {
             item["worker_id"]
             for item in (
@@ -254,7 +273,51 @@ class ComputePluginLoader:
         else:
             context["capabilities"] = {}
 
-        register(context)
+        plugin_instance = None
+
+        if entry_object:
+            plugin_class = getattr(
+                module,
+                entry_object,
+                None,
+            )
+
+            if plugin_class is None:
+                raise PluginLoadError(
+                    "Entrypoint-Objekt fehlt: "
+                    f"{entry_object}"
+                )
+
+            if not callable(plugin_class):
+                raise PluginLoadError(
+                    "Entrypoint-Objekt ist "
+                    "nicht aufrufbar."
+                )
+
+            plugin_instance = plugin_class()
+
+            register = getattr(
+                plugin_instance,
+                "register",
+                None,
+            )
+
+            if callable(register):
+                register(context)
+        else:
+            register = getattr(
+                module,
+                "register",
+                None,
+            )
+
+            if not callable(register):
+                raise PluginLoadError(
+                    "Entrypoint benoetigt "
+                    "register(context)."
+                )
+
+            register(context)
 
         after = {
             item["worker_id"]
@@ -267,16 +330,31 @@ class ComputePluginLoader:
             after - before
         )
 
-        if not registered:
+        # Provider-Plugins muessen nicht zwingend einen
+        # Worker registrieren. Legacy-ai_node-Plugins schon.
+        if (
+            legacy_plugin_type == "ai_node"
+            and not registered
+        ):
             raise PluginLoadError(
                 "Plugin hat keinen Worker "
                 "registriert."
             )
 
-        return {
+        result = {
             "plugin_id": plugin_id,
             "name": name,
             "version": version,
             "loaded": True,
             "workers": registered,
         }
+
+        if shared_plugin_type:
+            result["type"] = shared_plugin_type
+
+        if plugin_instance is not None:
+            self.instances[plugin_id] = (
+                plugin_instance
+            )
+
+        return result

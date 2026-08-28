@@ -145,6 +145,23 @@ class ComputeNodeAPI:
 
         return self.plugin_load_results
 
+    def uninstall_plugin(
+        self,
+        plugin_id: str,
+    ) -> dict[str, Any]:
+        result = self.plugin_installer.uninstall(
+            plugin_id
+        )
+
+        loaded = self.reload_plugins()
+
+        return {
+            "uninstalled": True,
+            "plugin": result,
+            "plugins": loaded,
+            "workers": self.workers.list_workers(),
+        }
+
     def install_plugin_package(
         self,
         package_path: Path,
@@ -397,6 +414,53 @@ class RequestHandler(
             "?",
             1,
         )[0].rstrip("/")
+
+        if path == "/plugins/uninstall":
+            if not self._require_auth():
+                return
+
+            plugin_id = str(
+                self.headers.get(
+                    "X-Plugin-ID",
+                    "",
+                )
+            ).strip()
+
+            if not plugin_id:
+                self._send_json(
+                    400,
+                    {
+                        "error": (
+                            "X-Plugin-ID fehlt."
+                        )
+                    },
+                )
+                return
+
+            try:
+                result = (
+                    self.api.uninstall_plugin(
+                        plugin_id
+                    )
+                )
+            except PluginInstallError as exc:
+                self._send_json(
+                    400,
+                    {"error": str(exc)},
+                )
+                return
+            except OSError as exc:
+                self._send_json(
+                    500,
+                    {"error": str(exc)},
+                )
+                return
+
+            self._send_json(
+                200,
+                result,
+            )
+            return
 
         if path == "/plugins/install":
             if not self._require_auth():

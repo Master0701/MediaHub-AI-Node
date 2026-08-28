@@ -69,16 +69,27 @@ class ComputePluginInstaller:
                 names
             )
 
-            if "plugin.json" not in names:
-                raise PluginInstallError(
-                    "plugin.json fehlt im "
-                    "Paketstamm."
+            manifest_names = [
+                name
+                for name in names
+                if (
+                    name == "plugin.json"
+                    or name.endswith("/plugin.json")
                 )
+            ]
+
+            if len(manifest_names) != 1:
+                raise PluginInstallError(
+                    "Genau ein plugin.json "
+                    "im Paket erwartet."
+                )
+
+            manifest_name = manifest_names[0]
 
             try:
                 manifest = json.loads(
                     archive.read(
-                        "plugin.json"
+                        manifest_name
                     ).decode("utf-8")
                 )
             except (
@@ -149,24 +160,54 @@ class ComputePluginInstaller:
                     extract_root
                 )
 
-            manifest_path = (
+            root_manifest = (
                 extract_root
                 / "plugin.json"
             )
 
-            if not manifest_path.is_file():
-                raise PluginInstallError(
-                    "Extrahiertes Manifest "
-                    "fehlt."
+            if root_manifest.is_file():
+                package_root = extract_root
+                manifest_path = root_manifest
+            else:
+                manifests = list(
+                    extract_root.glob(
+                        "*/plugin.json"
+                    )
+                )
+
+                if len(manifests) != 1:
+                    raise PluginInstallError(
+                        "Extrahiertes Manifest "
+                        "ist nicht eindeutig."
+                    )
+
+                manifest_path = manifests[0]
+                package_root = (
+                    manifest_path.parent
                 )
 
             entrypoint = str(
                 manifest["entrypoint"]
             ).strip()
 
+            entry_module = (
+                entrypoint.split(":", 1)[0]
+            )
+
+            if entry_module.endswith(".py"):
+                entry_relative = entry_module
+            else:
+                entry_relative = (
+                    entry_module.replace(
+                        ".",
+                        "/",
+                    )
+                    + ".py"
+                )
+
             entry_file = (
-                extract_root
-                / entrypoint
+                package_root
+                / entry_relative
             ).resolve()
 
             try:
@@ -199,7 +240,7 @@ class ComputePluginInstaller:
 
             try:
                 shutil.move(
-                    str(extract_root),
+                    str(package_root),
                     str(target),
                 )
             except Exception:
@@ -228,6 +269,96 @@ class ComputePluginInstaller:
             "path": str(target),
         }
 
+    def uninstall(
+        self,
+        plugin_id: str,
+    ) -> dict[str, Any]:
+        plugin_id = str(plugin_id).strip()
+
+        if not plugin_id:
+            raise PluginInstallError(
+                "Plugin-ID fehlt."
+            )
+
+        # Plugin-IDs dürfen niemals als Pfade benutzt
+        # werden können.
+        if (
+            plugin_id in {".", ".."}
+            or "/" in plugin_id
+            or "\\" in plugin_id
+        ):
+            raise PluginInstallError(
+                "Ungültige Plugin-ID."
+            )
+
+        target = (
+            self.plugin_root
+            / plugin_id
+        ).resolve()
+
+        plugin_root = (
+            self.plugin_root.resolve()
+        )
+
+        try:
+            target.relative_to(plugin_root)
+        except ValueError as exc:
+            raise PluginInstallError(
+                "Plugin-Pfad liegt außerhalb "
+                "des Plugin-Verzeichnisses."
+            ) from exc
+
+        if not target.is_dir():
+            raise PluginInstallError(
+                "Plugin ist nicht installiert."
+            )
+
+        manifest_path = (
+            target / "plugin.json"
+        )
+
+        name = plugin_id
+        version = ""
+
+        if manifest_path.is_file():
+            try:
+                manifest = json.loads(
+                    manifest_path.read_text(
+                        encoding="utf-8"
+                    )
+                )
+            except (
+                OSError,
+                UnicodeDecodeError,
+                json.JSONDecodeError,
+            ):
+                manifest = {}
+
+            if isinstance(manifest, dict):
+                name = str(
+                    manifest.get("name")
+                    or plugin_id
+                )
+                version = str(
+                    manifest.get("version")
+                    or ""
+                )
+
+        try:
+            shutil.rmtree(target)
+        except OSError as exc:
+            raise PluginInstallError(
+                "Plugin konnte nicht "
+                "deinstalliert werden."
+            ) from exc
+
+        return {
+            "uninstalled": True,
+            "plugin_id": plugin_id,
+            "name": name,
+            "version": version,
+        }
+
     @staticmethod
     def _validate_manifest(
         manifest: Any,
@@ -245,7 +376,6 @@ class ComputePluginInstaller:
             "id",
             "name",
             "version",
-            "plugin_type",
             "entrypoint",
         )
 
@@ -261,13 +391,48 @@ class ComputePluginInstaller:
                     f"{key}"
                 )
 
+        legacy_plugin_type = str(
+            manifest.get("plugin_type")
+            or ""
+        ).strip()
+
+        shared_plugin_type = str(
+            manifest.get("type")
+            or ""
+        ).strip()
+
+        if legacy_plugin_type:
+            if legacy_plugin_type != "ai_node":
+                raise PluginInstallError(
+                    "plugin_type muss "
+                    "'ai_node' sein."
+                )
+        elif not shared_plugin_type:
+            raise PluginInstallError(
+                "Manifest-Feld fehlt: type"
+            )
+
+        targets = manifest.get("targets")
+
         if (
-            manifest["plugin_type"]
-            != "ai_node"
+            targets is not None
+            and "windows_compute" not in targets
         ):
             raise PluginInstallError(
-                "plugin_type muss "
-                "'ai_node' sein."
+                "Plugin ist nicht fuer "
+                "windows_compute freigegeben."
+            )
+
+        platforms = manifest.get("platforms")
+
+        if (
+            platforms is not None
+            and platforms
+            and "windows-amd64" not in platforms
+        ):
+            raise PluginInstallError(
+                "Plugin unterstuetzt "
+                "windows-amd64 nicht."
             )
 
         plugin_id = str(

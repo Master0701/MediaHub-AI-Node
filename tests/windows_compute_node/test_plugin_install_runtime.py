@@ -180,3 +180,67 @@ def test_wrong_sha256_is_rejected(
                 "0" * 64
             ),
         )
+
+
+def test_uninstall_removes_plugin_and_runtime(
+    tmp_path,
+):
+    api = ComputeNodeAPI(
+        tmp_path / "runtime"
+    )
+
+    package = make_package(
+        tmp_path
+    )
+
+    installed = api.install_plugin_package(
+        package,
+        expected_sha256=sha256(
+            package
+        ),
+    )
+
+    assert installed["installed"] is True
+
+    plugin_path = (
+        tmp_path
+        / "runtime"
+        / "plugins"
+        / "test.runtime.plugin"
+    )
+
+    assert plugin_path.is_dir()
+
+    result = api.uninstall_plugin(
+        "test.runtime.plugin"
+    )
+
+    assert result["uninstalled"] is True
+    assert not plugin_path.exists()
+
+    assert not any(
+        item.get("plugin_id")
+        == "test.runtime.plugin"
+        for item in result["plugins"]
+    )
+
+    assert not any(
+        item.get("worker_id")
+        == "test.runtime.worker"
+        for item in result["workers"]
+    )
+
+
+def test_uninstall_unknown_plugin_is_rejected(
+    tmp_path,
+):
+    api = ComputeNodeAPI(
+        tmp_path / "runtime"
+    )
+
+    with pytest.raises(
+        PluginInstallError
+    ):
+        api.uninstall_plugin(
+            "plugin.does.not.exist"
+        )
