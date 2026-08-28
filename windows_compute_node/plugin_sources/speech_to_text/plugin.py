@@ -7,15 +7,63 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from windows_compute_node.plugin_sources.speech_to_text.runtime import (
-    inspect_cuda_runtime,
-    inspect_runtime,
-    install_cuda_dependencies,
-    install_dependencies,
-    venv_python,
+
+def _load_local_module(
+    module_name: str,
+    filename: str,
+):
+    module_path = (
+        Path(__file__).resolve().parent
+        / filename
+    )
+
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        module_path,
+    )
+
+    if (
+        spec is None
+        or spec.loader is None
+    ):
+        raise RuntimeError(
+            f"Lokales Speech-Modul "
+            f"{filename} kann nicht geladen werden."
+        )
+
+    module = importlib.util.module_from_spec(
+        spec
+    )
+
+    spec.loader.exec_module(module)
+
+    return module
+
+
+_runtime = _load_local_module(
+    "mediahub_speech_runtime",
+    "runtime.py",
 )
-from windows_compute_node.plugin_sources.speech_to_text.runtime_bridge import (
-    run_transcription,
+
+_runtime_bridge = _load_local_module(
+    "mediahub_speech_runtime_bridge",
+    "runtime_bridge.py",
+)
+
+inspect_cuda_runtime = (
+    _runtime.inspect_cuda_runtime
+)
+inspect_runtime = _runtime.inspect_runtime
+install_cuda_dependencies = (
+    _runtime.install_cuda_dependencies
+)
+install_dependencies = (
+    _runtime.install_dependencies
+)
+venv_python = _runtime.venv_python
+
+run_transcription = (
+    _runtime_bridge.run_transcription
 )
 
 _PLUGIN_DIR = Path(__file__).resolve().parent

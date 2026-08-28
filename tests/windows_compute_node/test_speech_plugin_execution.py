@@ -383,6 +383,74 @@ def test_unavailable_accelerator_ignored():
     assert result["backend"] == "cpu"
 
 
+
+@pytest.mark.parametrize(
+    ("requested", "expected_name"),
+    [
+        ("1", "NVIDIA GeForce RTX 3070 Laptop GPU"),
+        (
+            "NVIDIA GeForce RTX 3070 Laptop GPU",
+            "NVIDIA GeForce RTX 3070 Laptop GPU",
+        ),
+        (
+            r"PCI\VEN_10DE&DEV_249D&SUBSYS_106C1043"
+            r"&REV_A1\4&1BA6DC09&0&0009",
+            "NVIDIA GeForce RTX 3070 Laptop GPU",
+        ),
+    ],
+)
+def test_specific_real_accelerator_identifiers(
+    requested,
+    expected_name,
+):
+    module = load_module()
+
+    result = module.choose_backend(
+        execution={
+            "mode": "gpu",
+            "accelerator": requested,
+        },
+        capabilities=caps(
+            {
+                "index": 0,
+                "vendor": "AMD",
+                "name": "AMD Radeon(TM) Graphics",
+                "kind": "gpu",
+                "device_class": "integrated_gpu",
+                "integrated": True,
+                "backend_family": [
+                    "directml",
+                    "rocm",
+                ],
+                "available": True,
+            },
+            {
+                "index": 1,
+                "vendor": "NVIDIA",
+                "name": "NVIDIA GeForce RTX 3070 Laptop GPU",
+                "kind": "gpu",
+                "device_class": "discrete_gpu",
+                "integrated": False,
+                "backend_family": [
+                    "cuda",
+                    "directml",
+                ],
+                "available": True,
+                "pnp_device_id": (
+                    r"PCI\VEN_10DE&DEV_249D&SUBSYS_106C1043"
+                    r"&REV_A1\4&1BA6DC09&0&0009"
+                ),
+            },
+        ),
+    )
+
+    assert result["backend"] == "cuda"
+    assert result["accelerator"]["index"] == 1
+    assert (
+        result["accelerator"]["name"]
+        == expected_name
+    )
+
 def test_invalid_cpu_threads():
     module = load_module()
 

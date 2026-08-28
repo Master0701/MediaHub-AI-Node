@@ -256,6 +256,8 @@ def _specific_accelerator(
     accelerator_id: str,
     capabilities: dict[str, Any],
 ) -> dict[str, Any] | None:
+    requested = str(accelerator_id).strip()
+
     for accelerator in capabilities.get(
         "accelerators",
         [],
@@ -266,12 +268,18 @@ def _specific_accelerator(
         ):
             continue
 
-        if str(
-            accelerator.get(
-                "id",
-                "",
-            )
-        ) == accelerator_id:
+        identifiers = (
+            accelerator.get("id"),
+            accelerator.get("index"),
+            accelerator.get("name"),
+            accelerator.get("pnp_device_id"),
+        )
+
+        if any(
+            value is not None
+            and str(value).strip() == requested
+            for value in identifiers
+        ):
             return accelerator
 
     return None
