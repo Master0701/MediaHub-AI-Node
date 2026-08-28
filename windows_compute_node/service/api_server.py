@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
+import tempfile
 from http.server import (
     BaseHTTPRequestHandler,
     ThreadingHTTPServer,
@@ -21,6 +23,10 @@ from windows_compute_node.hardware.capabilities import (
 )
 from windows_compute_node.jobs.queue import (
     JobQueue,
+)
+from windows_compute_node.plugins.installer import (
+    ComputePluginInstaller,
+    PluginInstallError,
 )
 from windows_compute_node.plugins.loader import (
     ComputePluginLoader,
@@ -82,6 +88,15 @@ class ComputeNodeAPI:
             workers=self.workers,
         )
 
+        self.plugin_installer = (
+            ComputePluginInstaller(
+                plugin_root=(
+                    self.runtime_dir
+                    / "plugins"
+                ),
+            )
+        )
+
         self.plugin_loader = (
             ComputePluginLoader(
                 plugin_root=(
@@ -98,6 +113,105 @@ class ComputeNodeAPI:
         self.plugin_load_results = (
             self.plugin_loader.load_all()
         )
+
+    def reload_plugins(
+        self,
+    ) -> list[dict[str, Any]]:
+        """Lädt Plugin- und Worker-Runtime vollständig neu."""
+
+        self.workers = WorkerRegistry()
+
+        self.dispatcher = JobDispatcher(
+            jobs=self.jobs,
+            workers=self.workers,
+        )
+
+        self.plugin_loader = (
+            ComputePluginLoader(
+                plugin_root=(
+                    self.runtime_dir
+                    / "plugins"
+                ),
+                workers=self.workers,
+                capabilities_provider=(
+                    get_capabilities
+                ),
+            )
+        )
+
+        self.plugin_load_results = (
+            self.plugin_loader.load_all()
+        )
+
+        return self.plugin_load_results
+
+    def install_plugin_package(
+        self,
+        package_path: Path,
+        *,
+        expected_sha256: str,
+        replace: bool = False,
+    ) -> dict[str, Any]:
+        package_path = Path(
+            package_path
+        )
+
+        expected = (
+            str(expected_sha256)
+            .strip()
+            .lower()
+        )
+
+        if not expected:
+            raise PluginInstallError(
+                "SHA-256-Prüfsumme fehlt."
+            )
+
+        digest = hashlib.sha256(
+            package_path.read_bytes()
+        ).hexdigest()
+
+        if digest != expected:
+            raise PluginInstallError(
+                "SHA-256-Prüfsumme stimmt "
+                "nicht mit dem Paket überein."
+            )
+
+        result = self.plugin_installer.install(
+            package_path,
+            replace=replace,
+        )
+
+        loaded = self.reload_plugins()
+
+        plugin_id = str(
+            result.get("plugin_id")
+            or result.get("id")
+            or ""
+        )
+
+        runtime_result = next(
+            (
+                item
+                for item in loaded
+                if isinstance(item, dict)
+                and str(
+                    item.get("plugin_id")
+                    or item.get("id")
+                    or ""
+                )
+                == plugin_id
+            ),
+            None,
+        )
+
+        return {
+            "installed": True,
+            "plugin": result,
+            "runtime": runtime_result,
+            "plugins": loaded,
+            "workers": self.workers.list_workers(),
+        }
 
     def health(self) -> dict[str, Any]:
         return {
@@ -240,11 +354,190 @@ class RequestHandler(
 
         return data
 
+    def _read_binary_body(
+        self,
+        *,
+        max_bytes: int = 512 * 1024 * 1024,
+    ) -> bytes:
+        try:
+            length = int(
+                self.headers.get(
+                    "Content-Length",
+                    "0",
+                )
+            )
+        except ValueError:
+            length = 0
+
+        if length <= 0:
+            raise ValueError(
+                "Leerer Request-Body."
+            )
+
+        if length > max_bytes:
+            raise ValueError(
+                "Plugin-Paket ist größer "
+                "als 512 MiB."
+            )
+
+        body = self.rfile.read(
+            length
+        )
+
+        if len(body) != length:
+            raise ValueError(
+                "Plugin-Paket wurde nicht "
+                "vollständig übertragen."
+            )
+
+        return body
+
     def do_POST(self) -> None:
         path = self.path.split(
             "?",
             1,
         )[0].rstrip("/")
+
+        if path == "/plugins/install":
+            if not self._require_auth():
+                return
+
+            filename = str(
+                self.headers.get(
+                    "X-Plugin-Filename",
+                    "",
+                )
+            ).strip()
+
+            expected_sha256 = str(
+                self.headers.get(
+                    "X-Plugin-SHA256",
+                    "",
+                )
+            ).strip()
+
+            replace_value = str(
+                self.headers.get(
+                    "X-Plugin-Replace",
+                    "false",
+                )
+            ).strip().lower()
+
+            replace = replace_value in {
+                "1",
+                "true",
+                "yes",
+                "on",
+            }
+
+            safe_name = Path(
+                filename
+            ).name
+
+            if (
+                not safe_name
+                or safe_name != filename
+                or not safe_name.lower().endswith(
+                    ".mhaiplugin"
+                )
+            ):
+                self._send_json(
+                    400,
+                    {
+                        "error": (
+                            "invalid_plugin_filename"
+                        ),
+                        "detail": (
+                            "Ungültiger "
+                            ".mhaiplugin-Dateiname."
+                        ),
+                    },
+                )
+                return
+
+            if not expected_sha256:
+                self._send_json(
+                    400,
+                    {
+                        "error": (
+                            "missing_sha256"
+                        ),
+                        "detail": (
+                            "X-Plugin-SHA256 fehlt."
+                        ),
+                    },
+                )
+                return
+
+            try:
+                body = self._read_binary_body()
+            except ValueError as error:
+                self._send_json(
+                    400,
+                    {
+                        "error": (
+                            "invalid_plugin_body"
+                        ),
+                        "detail": str(error),
+                    },
+                )
+                return
+
+            try:
+                with tempfile.TemporaryDirectory(
+                    prefix=(
+                        "mediahub_compute_upload_"
+                    )
+                ) as temp_name:
+                    package = (
+                        Path(temp_name)
+                        / safe_name
+                    )
+
+                    package.write_bytes(
+                        body
+                    )
+
+                    result = (
+                        self.api
+                        .install_plugin_package(
+                            package,
+                            expected_sha256=(
+                                expected_sha256
+                            ),
+                            replace=replace,
+                        )
+                    )
+
+            except PluginInstallError as error:
+                self._send_json(
+                    400,
+                    {
+                        "error": (
+                            "plugin_install_failed"
+                        ),
+                        "detail": str(error),
+                    },
+                )
+                return
+
+            except OSError as error:
+                self._send_json(
+                    500,
+                    {
+                        "error": (
+                            "plugin_io_error"
+                        ),
+                        "detail": str(error),
+                    },
+                )
+                return
+
+            self._send_json(
+                201,
+                result,
+            )
+            return
 
         if path == "/plugins":
             if not self._require_auth():
