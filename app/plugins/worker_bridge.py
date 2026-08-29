@@ -108,7 +108,15 @@ class PluginWorkerRegistry:
                     f"Plugin '{existing_plugin_id}'."
                 )
 
-            self.unregister(clean_id)
+        existing_adapters = set(
+            (
+                existing_worker
+                or {}
+            ).get(
+                "job_handlers",
+                {},
+            ).values()
+        )
 
         for job_type in clean_types:
             current = job_handler_registry.get(job_type)
@@ -116,16 +124,7 @@ class PluginWorkerRegistry:
             if current is None:
                 continue
 
-            owned_by_same_worker = (
-                existing_worker is not None
-                and current
-                in existing_worker.get(
-                    "job_handlers",
-                    {},
-                ).values()
-            )
-
-            if not owned_by_same_worker:
+            if current not in existing_adapters:
                 raise ValueError(
                     f"Job-Typ '{job_type}' ist bereits "
                     "durch einen anderen Handler registriert."
@@ -143,7 +142,10 @@ class PluginWorkerRegistry:
             "job_handlers": {},
         }
 
-        self._workers[clean_id] = worker
+        new_adapters: dict[
+            str,
+            PluginWorkerJobHandler,
+        ] = {}
 
         if (
             handler is not None
@@ -151,12 +153,62 @@ class PluginWorkerRegistry:
             and worker["healthy"]
         ):
             for job_type in clean_types:
-                adapter = PluginWorkerJobHandler(
-                    job_type=job_type,
-                    handler=handler,
+                new_adapters[job_type] = (
+                    PluginWorkerJobHandler(
+                        job_type=job_type,
+                        handler=handler,
+                    )
                 )
+
+        removed_existing = False
+        registered_new: list[
+            tuple[str, PluginWorkerJobHandler]
+        ] = []
+
+        try:
+            if existing_worker is not None:
+                self.unregister(clean_id)
+                removed_existing = True
+
+            for job_type, adapter in new_adapters.items():
                 job_handler_registry.register(adapter)
-                worker["job_handlers"][job_type] = adapter
+                registered_new.append(
+                    (job_type, adapter)
+                )
+
+            worker["job_handlers"].update(
+                new_adapters
+            )
+            self._workers[clean_id] = worker
+
+        except Exception:
+            for job_type, adapter in reversed(
+                registered_new
+            ):
+                job_handler_registry.unregister(
+                    job_type,
+                    handler=adapter,
+                )
+
+            if (
+                removed_existing
+                and existing_worker is not None
+            ):
+                old_handlers = existing_worker.get(
+                    "job_handlers",
+                    {},
+                )
+
+                for adapter in old_handlers.values():
+                    job_handler_registry.register(
+                        adapter
+                    )
+
+                self._workers[clean_id] = (
+                    existing_worker
+                )
+
+            raise
 
     def worker_ids_for_plugin(
         self,

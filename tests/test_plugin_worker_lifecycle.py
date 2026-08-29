@@ -228,3 +228,110 @@ def test_worker_cannot_replace_existing_job_handler(
             protected_job_type,
             handler=protected_handler,
         )
+
+def test_failed_reregistration_preserves_existing_worker():
+    from app.jobs.base import BaseJobHandler
+    from app.jobs.registry import job_handler_registry
+    from app.plugins.worker_bridge import PluginWorkerRegistry
+
+    registry = PluginWorkerRegistry()
+
+    def old_handler(request):
+        return {"old": True, "request": request}
+
+    registry.register(
+        worker_id="worker-a",
+        name="Worker A",
+        job_types=["job-a"],
+        handler=old_handler,
+        metadata={"plugin_id": "plugin-a"},
+    )
+
+    old_job_handler = job_handler_registry.get("job-a")
+
+    class ProtectedHandler(BaseJobHandler):
+        job_type = "job-b"
+
+        def execute(
+            self,
+            db,
+            payload,
+            progress_callback,
+        ):
+            return {"protected": True}
+
+    protected = ProtectedHandler()
+    job_handler_registry.register(protected)
+
+    try:
+        import pytest
+
+        with pytest.raises(
+            ValueError,
+            match="bereits",
+        ):
+            registry.register(
+                worker_id="worker-a",
+                name="Worker A New",
+                job_types=["job-a", "job-b"],
+                handler=lambda request: {"new": True},
+                metadata={"plugin_id": "plugin-a"},
+            )
+
+        worker = registry.get("worker-a")
+
+        assert worker is not None
+        assert worker["name"] == "Worker A"
+        assert worker["job_types"] == ["job-a"]
+        assert job_handler_registry.get("job-a") is old_job_handler
+        assert job_handler_registry.get("job-b") is protected
+
+    finally:
+        registry.unregister("worker-a")
+        job_handler_registry.unregister(
+            "job-b",
+            handler=protected,
+        )
+
+
+def test_partial_multijob_registration_rolls_back(monkeypatch):
+    from app.jobs.registry import job_handler_registry
+    from app.plugins.worker_bridge import PluginWorkerRegistry
+
+    registry = PluginWorkerRegistry()
+    original_register = job_handler_registry.register
+
+    calls = 0
+
+    def failing_register(handler):
+        nonlocal calls
+        calls += 1
+
+        if calls == 2:
+            raise RuntimeError("simulierter Registrierungsfehler")
+
+        return original_register(handler)
+
+    monkeypatch.setattr(
+        job_handler_registry,
+        "register",
+        failing_register,
+    )
+
+    import pytest
+
+    with pytest.raises(
+        RuntimeError,
+        match="simulierter Registrierungsfehler",
+    ):
+        registry.register(
+            worker_id="worker-multi",
+            name="Worker Multi",
+            job_types=["multi-a", "multi-b"],
+            handler=lambda request: {"ok": True},
+            metadata={"plugin_id": "plugin-multi"},
+        )
+
+    assert registry.get("worker-multi") is None
+    assert job_handler_registry.get("multi-a") is None
+    assert job_handler_registry.get("multi-b") is None
