@@ -219,6 +219,50 @@ def test_replace_existing_plugin(
     assert result["installed"] is True
 
 
+def test_nested_package_entrypoint_cannot_escape_package_root(
+    tmp_path,
+):
+    package = (
+        tmp_path
+        / "nested_escape.mhaiplugin"
+    )
+
+    manifest = {
+        "id": "nested.plugin",
+        "name": "Nested Plugin",
+        "version": "1.0.0",
+        "plugin_type": "ai_node",
+        "entrypoint": "../outside.py",
+    }
+
+    with zipfile.ZipFile(
+        package,
+        "w",
+    ) as archive:
+        archive.writestr(
+            "nested.plugin/plugin.json",
+            json.dumps(manifest),
+        )
+        archive.writestr(
+            "outside.py",
+            "def register(context): pass",
+        )
+
+    installer = ComputePluginInstaller(
+        plugin_root=(
+            tmp_path / "installed"
+        )
+    )
+
+    with pytest.raises(
+        PluginInstallError,
+        match="Entrypoint liegt",
+    ):
+        installer.install(
+            package
+        )
+
+
 def test_path_traversal_fails(
     tmp_path,
 ):

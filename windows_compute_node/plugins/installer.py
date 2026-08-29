@@ -212,7 +212,7 @@ class ComputePluginInstaller:
 
             try:
                 entry_file.relative_to(
-                    extract_root.resolve()
+                    package_root.resolve()
                 )
             except ValueError as exc:
                 raise PluginInstallError(
