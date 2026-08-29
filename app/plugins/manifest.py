@@ -19,6 +19,7 @@ class PluginType(StrEnum):
     """Unterstützte Typen von AI-Node-Plugins."""
 
     PROVIDER = "provider"
+    WORKER = "worker"
     OCR = "ocr"
     AUDIO = "audio"
     VIDEO = "video"

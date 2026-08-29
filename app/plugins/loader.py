@@ -10,6 +10,41 @@ from app.plugins.errors import PluginLoadError, PluginManifestError
 from app.plugins.manifest import PluginManifest
 from app.plugins.registry import PluginRecord, PluginRegistry
 from app.plugins.state import PluginStateStore
+from app.plugins.worker_bridge import plugin_worker_registry
+
+
+class _PluginWorkerContext:
+    """Bindet Worker-Registrierungen an ein Plugin."""
+
+    def __init__(
+        self,
+        registry: object,
+        plugin_id: str,
+    ) -> None:
+        self._registry = registry
+        self._plugin_id = plugin_id.strip().lower()
+
+    def register(self, **kwargs: object) -> None:
+        metadata = dict(
+            kwargs.pop("metadata", {}) or {}
+        )
+        metadata["plugin_id"] = self._plugin_id
+        kwargs["metadata"] = metadata
+        self._registry.register(**kwargs)
+
+    def unregister(self, worker_id: str) -> bool:
+        worker = self._registry.get(worker_id)
+
+        if worker is None:
+            return False
+
+        if worker.get("plugin_id") != self._plugin_id:
+            return False
+
+        return self._registry.unregister(worker_id)
+
+    def get(self, worker_id: str) -> dict | None:
+        return self._registry.get(worker_id)
 
 
 class PluginLoader:
@@ -29,6 +64,9 @@ class PluginLoader:
 
     def discover(self) -> tuple[PluginRecord, ...]:
         """Sucht direkte Unterordner mit `plugin.json`."""
+
+        for record in self.registry.all():
+            self.unload(record)
 
         self.registry.clear()
         self.state_store.load()
@@ -168,7 +206,37 @@ class PluginLoader:
             spec.loader.exec_module(module)
             entrypoint = getattr(module, object_name)
             instance = entrypoint() if isinstance(entrypoint, type) else entrypoint
+
+            register = getattr(instance, "register", None)
+            if callable(register):
+                context = {
+                    "plugin_id": record.manifest.plugin_id,
+                    "plugin_name": record.manifest.name,
+                    "plugin_version": record.manifest.version,
+                    "plugin_path": record.root_path,
+                    "workers": _PluginWorkerContext(
+                        plugin_worker_registry,
+                        record.manifest.plugin_id,
+                    ),
+                    "manifest": {
+                        "id": record.manifest.plugin_id,
+                        "name": record.manifest.name,
+                        "version": record.manifest.version,
+                        "type": record.manifest.plugin_type.value,
+                        "entrypoint": record.manifest.entrypoint,
+                        "capabilities": list(
+                            record.manifest.capabilities
+                        ),
+                        **record.manifest.metadata,
+                    },
+                    "capabilities": {},
+                    "capabilities_provider": None,
+                }
+                register(context)
         except Exception as exc:
+            plugin_worker_registry.unregister_plugin(
+                record.manifest.plugin_id
+            )
             sys.modules.pop(unique_name, None)
             raise PluginLoadError(
                 f"Plugin '{record.manifest.plugin_id}' konnte nicht "
@@ -179,3 +247,21 @@ class PluginLoader:
         record.loaded = True
         record.error = None
         return instance
+
+    def unload(self, record: PluginRecord) -> None:
+        """Entfernt Laufzeitregistrierungen eines Plugins."""
+
+        plugin_worker_registry.unregister_plugin(
+            record.manifest.plugin_id
+        )
+
+        unique_name = (
+            "mediahub_ai_plugin_"
+            + record.manifest.plugin_id
+            .replace("-", "_")
+            .replace(".", "_")
+        )
+        sys.modules.pop(unique_name, None)
+
+        record.loaded = False
+        record.instance = None

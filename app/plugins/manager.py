@@ -41,9 +41,8 @@ class PluginManager:
 
     def disable(self, plugin_id: str) -> PluginRecord:
         record = self.registry.require(plugin_id)
+        self.loader.unload(record)
         record.enabled = False
-        record.loaded = False
-        record.instance = None
         self.state_store.set_enabled(plugin_id, False)
         self.state_store.save()
         return record

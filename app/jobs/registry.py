@@ -31,6 +31,23 @@ class JobHandlerRegistry:
             handler.job_type
         ] = handler
 
+    def unregister(
+        self,
+        job_type: str,
+        *,
+        handler: BaseJobHandler | None = None,
+    ) -> bool:
+        current = self._handlers.get(job_type)
+
+        if current is None:
+            return False
+
+        if handler is not None and current is not handler:
+            return False
+
+        del self._handlers[job_type]
+        return True
+
     def get(
         self,
         job_type: str,
