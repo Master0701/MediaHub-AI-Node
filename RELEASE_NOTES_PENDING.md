@@ -5,7 +5,7 @@ getrennten Windows-Varianten des MediaHub Compute Node.
 
 ## MediaHub-AI-Node – Raspberry Pi / Linux
 
-Version: **0.8.18**
+Version: **0.8.19**
 
 - bestehender Raspberry-Pi-/Linux-AI-Node
 - bestehender Online-Installer bleibt unverändert
