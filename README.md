@@ -59,7 +59,13 @@ python release.py
 
 ## Lizenz
 
-MIT-Lizenz. Drittanbieter-Komponenten behalten ihre jeweiligen Lizenzen.
+Der eigene Programmcode des MediaHub-AI-Node steht unter der MIT-Lizenz.
+
+Verwendete Drittanbieter-Komponenten sowie Build- und Zusatztools behalten ihre jeweiligen Lizenzen.
+
+- Die vollständige Übersicht der Drittanbieter-Komponenten und Werkzeuge befindet sich in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md).
+- Erforderliche Original-Lizenztexte befinden sich im Verzeichnis [licenses/](licenses/).
+- Die Lizenz des eigenen MediaHub-AI-Node-Programmcodes befindet sich in [LICENSE](LICENSE).
 
 ## Entwicklung unter Windows
 
