@@ -37,6 +37,10 @@ from windows_compute_node.security.api_token import (
 from windows_compute_node.security.pairing import (
     PairingManager,
 )
+from windows_compute_node.service.runtime_status import (
+    ComputeNodeRuntimeStatus,
+)
+from windows_compute_node.version import WINDOWS_COMPUTE_NODE_VERSION
 from windows_compute_node.workers.dispatcher import (
     JobDispatcher,
 )
@@ -81,6 +85,7 @@ class ComputeNodeAPI:
         )
 
         self.jobs = JobQueue()
+        self.runtime_status = ComputeNodeRuntimeStatus()
         self.workers = WorkerRegistry()
 
         self.dispatcher = JobDispatcher(
@@ -323,6 +328,7 @@ class RequestHandler(
 
     def _require_auth(self) -> bool:
         if self._authorized():
+            self.api.runtime_status.mark_authenticated_request()
             return True
 
         self._send_json(
@@ -829,6 +835,15 @@ class RequestHandler(
             1,
         )[0].rstrip("/")
 
+        if path == "/status":
+            self._send_status_page()
+            return
+
+        if path == "/favicon.ico":
+            self.send_response(204)
+            self.end_headers()
+            return
+
         if path == "/health":
             self._send_json(
                 200,
@@ -924,6 +939,201 @@ class RequestHandler(
             },
         )
 
+    def _send_status_page(self) -> None:
+        """Serve the local browser status page."""
+        client_ip = str(self.client_address[0])
+
+        if client_ip not in {"127.0.0.1", "::1"}:
+            self._send_json(
+                403,
+                {
+                    "error": "local_status_only",
+                    "detail": "Die Statusseite ist nur lokal verfügbar.",
+                },
+            )
+            return
+
+        info = self.api.capabilities_info()
+        identity = self.api.identity_info()
+
+        accelerators = info.get("accelerators") or []
+        gpu_names = ", ".join(
+            str(item.get("name", "")).strip()
+            for item in accelerators
+            if str(item.get("name", "")).strip()
+        ) or "Keine GPU erkannt"
+
+        platform_name = str(info.get("platform") or "Windows")
+        machine = str(info.get("machine") or "AMD64")
+        node_id = str(identity.get("node_id") or "Unbekannt")
+
+        html = f"""<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MediaHub Compute Node</title>
+<style>
+:root {{
+    color-scheme: dark;
+    font-family: "Segoe UI", system-ui, sans-serif;
+}}
+* {{
+    box-sizing: border-box;
+}}
+body {{
+    margin: 0;
+    min-height: 100vh;
+    background: #0d1117;
+    color: #f4f7fb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 32px;
+}}
+.panel {{
+    width: min(820px, 100%);
+    background: #11151d;
+    border: 1px solid #202938;
+    border-radius: 18px;
+    padding: 30px;
+    box-shadow: 0 22px 70px rgba(0, 0, 0, .38);
+}}
+.header {{
+    display: flex;
+    gap: 18px;
+    align-items: center;
+}}
+.logo {{
+    width: 62px;
+    height: 62px;
+    border-radius: 16px;
+    display: grid;
+    place-items: center;
+    font-size: 34px;
+    font-weight: 800;
+    color: #48c7ff;
+    background: #17202c;
+    box-shadow: 0 0 26px rgba(72, 199, 255, .18);
+}}
+h1 {{
+    margin: 0;
+    font-size: 27px;
+}}
+.version {{
+    margin-top: 5px;
+    color: #8e9aaa;
+}}
+.status {{
+    margin-top: 28px;
+    background: #19212c;
+    border-radius: 14px;
+    padding: 18px 20px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}}
+.dot {{
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: #43d17b;
+    box-shadow: 0 0 16px rgba(67, 209, 123, .6);
+}}
+.status strong {{
+    font-size: 18px;
+}}
+.details {{
+    margin-top: 18px;
+    background: #151b24;
+    border-radius: 14px;
+    overflow: hidden;
+}}
+.row {{
+    display: grid;
+    grid-template-columns: 150px 1fr;
+    gap: 24px;
+    padding: 15px 20px;
+    border-bottom: 1px solid #212a36;
+}}
+.row:last-child {{
+    border-bottom: 0;
+}}
+.label {{
+    color: #7f8b99;
+}}
+.value {{
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}}
+.footer {{
+    margin-top: 20px;
+    color: #697687;
+    font-size: 13px;
+}}
+</style>
+</head>
+<body>
+<main class="panel">
+    <div class="header">
+        <div class="logo">M</div>
+        <div>
+            <h1>MediaHub Compute Node</h1>
+            <div class="version">Version {WINDOWS_COMPUTE_NODE_VERSION}</div>
+        </div>
+    </div>
+
+    <div class="status">
+        <div class="dot"></div>
+        <strong>Läuft</strong>
+        <span>Compute Node ist betriebsbereit</span>
+    </div>
+
+    <div class="details">
+        <div class="row">
+            <div class="label">Node-ID</div>
+            <div class="value">{node_id}</div>
+        </div>
+        <div class="row">
+            <div class="label">Port</div>
+            <div class="value">8766</div>
+        </div>
+        <div class="row">
+            <div class="label">Plattform</div>
+            <div class="value">{platform_name} ({machine})</div>
+        </div>
+        <div class="row">
+            <div class="label">Hardware</div>
+            <div class="value">{gpu_names}</div>
+        </div>
+    </div>
+
+    <div class="footer">
+        Lokale Statusseite · API-Token wird nicht angezeigt.
+    </div>
+</main>
+</body>
+</html>
+"""
+
+        payload = html.encode("utf-8")
+
+        self.send_response(200)
+        self.send_header(
+            "Content-Type",
+            "text/html; charset=utf-8",
+        )
+        self.send_header(
+            "Content-Length",
+            str(len(payload)),
+        )
+        self.send_header(
+            "Cache-Control",
+            "no-store",
+        )
+        self.end_headers()
+        self.wfile.write(payload)
+
     def log_message(
         self,
         format: str,
@@ -936,12 +1146,12 @@ class RequestHandler(
             format % args,
         )
 
-
-def run_server(
+def create_server(
     runtime_dir: Path,
     host: str,
     port: int,
-) -> None:
+) -> tuple[ThreadingHTTPServer, ComputeNodeAPI]:
+    """Create the Compute Node API without starting its serve loop."""
     api = ComputeNodeAPI(
         runtime_dir
     )
@@ -951,6 +1161,20 @@ def run_server(
     server = ThreadingHTTPServer(
         (host, port),
         RequestHandler,
+    )
+
+    return server, api
+
+
+def run_server(
+    runtime_dir: Path,
+    host: str,
+    port: int,
+) -> None:
+    server, api = create_server(
+        runtime_dir=runtime_dir,
+        host=host,
+        port=port,
     )
 
     print(

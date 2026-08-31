@@ -191,5 +191,18 @@
     "license_files": [
       "BSD-2-Clause.txt"
     ]
+  },
+  "pystray": {
+    "license": "LGPL-3.0-or-later",
+    "license_files": [
+      "pystray-COPYING.txt",
+      "LGPL-3.0.txt"
+    ]
+  },
+  "Pillow": {
+    "license": "MIT-CMU and bundled component licenses",
+    "license_files": [
+      "Pillow-LICENSE.txt"
+    ]
   }
 }

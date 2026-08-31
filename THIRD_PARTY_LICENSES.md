@@ -111,3 +111,47 @@ Grafiktreiberumgebung.
 ## Release-Regel
 
 Ein Release darf nur erstellt werden, wenn jede direkte Abhängigkeit aus `requirements.txt` in `licenses/dependency_licenses.json` erfasst ist, alle referenzierten Lizenztexte vorhanden sind und der gesamte `licenses/`-Ordner zusammen mit `THIRD_PARTY_LICENSES.md` im Release enthalten ist.
+
+
+### Windows Tray / GUI
+
+#### pystray
+
+- Verwendung: Windows-System-Tray des MediaHub Compute Node
+- Paket: `pystray`
+- Lizenz laut Paketmetadaten: GNU Lesser General Public License v3
+- Original-Lizenzdateien:
+  - `licenses/pystray-COPYING.txt`
+  - `licenses/LGPL-3.0.txt`
+
+#### Pillow
+
+- Verwendung: Bild- und Icon-Verarbeitung für die Windows-Tray-Oberfläche
+- Paket: `Pillow`
+- Lizenz laut Paketmetadaten: MIT-CMU
+- Pillow enthält bzw. verwendet zusätzlich Komponenten mit eigenen
+  Lizenzbedingungen.
+- Der vollständige mit dem installierten Pillow-Paket ausgelieferte
+  Lizenztext einschließlich der Hinweise zu gebündelten Komponenten liegt
+  unter:
+  - `licenses/Pillow-LICENSE.txt`
+### Windows Build- und Installer-Werkzeuge
+
+#### PyInstaller
+
+- Verwendung: Erstellung der eigenständigen Windows-EXE des MediaHub Compute Node
+- Build-Werkzeug: `PyInstaller`
+- Aktuell verwendete Version: `6.22.2`
+- Lizenz: GPL-2.0-or-later mit PyInstaller Bootloader Exception
+- PyInstaller wird als Build-Werkzeug verwendet und nicht als eigenständiges MediaHub-Programm weitergegeben.
+- Die PyInstaller Bootloader Exception erlaubt die Verteilung der mit PyInstaller erzeugten Anwendung unter der Lizenz der Anwendung.
+
+#### Inno Setup
+
+- Verwendung: Erstellung des Windows-Setup-Pakets des MediaHub Compute Node
+- Build-Werkzeug: `Inno Setup`
+- Aktuell verwendete Version: `6.7.3`
+- Inno Setup wird ausschließlich zum Erzeugen des Setup-Pakets verwendet und nicht mit MediaHub ausgeliefert.
+- Für die verwendete Inno-Setup-Installation gelten die Lizenzbedingungen des Herstellers.
+- Der derzeit verwendete Compiler meldet `Non-commercial use only`.
+- Vor einer kommerziellen Nutzung oder kommerziellen Veröffentlichung muss daher eine dafür geeignete Inno-Setup-Lizenz vorhanden sein.

@@ -10,7 +10,8 @@ permissions:
   contents: write
 
 jobs:
-  release:
+  linux-package:
+    name: Raspberry Pi / Linux
     runs-on: ubuntu-latest
 
     steps:
@@ -30,40 +31,147 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements-dev.txt
 
-      - name: Version gegen Tag prüfen
+      - name: AI-Node-Version gegen Tag prüfen
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
           VERSION="$(python -c 'from app.version import APP_VERSION; print(APP_VERSION)')"
 
-          echo "Projektversion: ${VERSION}"
+          echo "AI-Node-Version: ${VERSION}"
           echo "Git-Tag: ${GITHUB_REF_NAME}"
 
           if [ "v${VERSION}" != "${GITHUB_REF_NAME}" ]; then
-            echo "::error::Die Projektversion v${VERSION} stimmt nicht mit dem Tag ${GITHUB_REF_NAME} überein."
+            echo "::error::Die AI-Node-Version v${VERSION} stimmt nicht mit dem Tag ${GITHUB_REF_NAME} überein."
             exit 1
           fi
 
-      - name: Prüfen und Release-Pakete erstellen
+      - name: Prüfen und Linux-Release-Paket erstellen
         run: python release.py
 
-      - name: Release-Dateien anzeigen
+      - name: Linux-Release-Dateien anzeigen
         shell: bash
         run: |
-          echo "Erstellte Release-Dateien:"
+          echo "Erstellte Linux/Pi-Dateien:"
           ls -lh release/
+
+      - name: Linux-Release-Dateien zwischenspeichern
+        uses: actions/upload-artifact@v4
+        with:
+          name: mediahub-ai-node-linux-release
+          path: |
+            release/MediaHub-AI-Node_*.zip
+            release/MediaHub-AI-Node_*.zip.sha256
+          if-no-files-found: error
+
+
+  windows-compute:
+    name: Windows Compute Node
+    runs-on: windows-latest
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Python einrichten
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.14"
+          cache: pip
+
+      - name: Python-Abhängigkeiten installieren
+        shell: pwsh
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install -r requirements-dev.txt
+          pip install -r windows_compute_node/requirements-windows.txt
+          python -m pip install pyinstaller
+
+      - name: Inno Setup installieren
+        shell: pwsh
+        run: |
+          choco install innosetup --no-progress -y
+
+      - name: Windows Compute Node bauen
+        shell: pwsh
+        run: |
+          python windows_compute_node/build_tools/build_windows.py
+
+      - name: Windows Setup bauen
+        shell: pwsh
+        run: |
+          python windows_compute_node/build_tools/build_installer.py
+
+      - name: Windows-Release-Dateien anzeigen
+        shell: pwsh
+        run: |
+          Get-ChildItem release/windows_compute_node -File |
+            ForEach-Object {
+              Write-Host "$($_.Name) | $($_.Length) Bytes"
+            }
+
+      - name: Windows-Release-Dateien zwischenspeichern
+        uses: actions/upload-artifact@v4
+        with:
+          name: mediahub-compute-node-windows-release
+          path: |
+            release/windows_compute_node/*.exe
+            release/windows_compute_node/*.exe.sha256
+            release/windows_compute_node/*.zip
+            release/windows_compute_node/*.zip.sha256
+          if-no-files-found: error
+
+
+  publish:
+    name: Gemeinsames GitHub Release
+    if: startsWith(github.ref, 'refs/tags/')
+    needs:
+      - linux-package
+      - windows-compute
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Repository auschecken
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Linux-Release herunterladen
+        uses: actions/download-artifact@v4
+        with:
+          name: mediahub-ai-node-linux-release
+          path: release/linux
+
+      - name: Windows-Release herunterladen
+        uses: actions/download-artifact@v4
+        with:
+          name: mediahub-compute-node-windows-release
+          path: release/windows
+
+      - name: Gemeinsame Release-Dateien anzeigen
+        shell: bash
+        run: |
+          echo "Linux / Raspberry Pi:"
+          find release/linux -maxdepth 2 -type f -print
+
+          echo
+          echo "Windows Compute Node:"
+          find release/windows -maxdepth 2 -type f -print
 
       - name: GitHub-Release erstellen
         uses: softprops/action-gh-release@v3
         with:
           body_path: RELEASE_NOTES_PENDING.md
           files: |
-            release/*.zip
-            release/*.sha256
+            release/linux/*
+            release/windows/*
           fail_on_unmatched_files: true
 
       - name: Temporäre Release-Notizen entfernen
-        if: success() && startsWith(github.ref, 'refs/tags/')
+        if: success()
         shell: bash
         run: |
           set -e

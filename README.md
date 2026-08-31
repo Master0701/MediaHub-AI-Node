@@ -73,3 +73,127 @@ python -m pip install pytest==9.1.1 ruff
 python -m pytest
 python -m ruff check .
 ```
+
+---
+
+# MediaHub Compute Node für Windows
+
+Zusätzlich zum Raspberry-Pi-/Linux-AI-Node enthält dieses Repository den
+getrennten **MediaHub Compute Node für Windows**.
+
+Der Windows Compute Node ist ein optionaler zusätzlicher Ausführungsknoten
+für MediaHub. Er ersetzt weder die interne MediaHub-KI noch den bestehenden
+Raspberry-Pi-AI-Node.
+
+Der vorhandene Raspberry-Pi-Online-Installer bleibt vollständig getrennt
+und wird durch den Windows-Build und Windows-Installer nicht verändert.
+
+## Windows-Varianten
+
+Für Windows werden zwei getrennte Varianten veröffentlicht:
+
+### Windows Setup
+
+Das Setup ist für eine normale und dauerhafte Windows-Installation
+vorgesehen.
+
+Es installiert den MediaHub Compute Node als Windows-Anwendung und bietet
+unter anderem:
+
+- Installation unter Windows x64
+- Startmenü-Eintrag
+- optionales Desktop-Symbol
+- optionalen automatischen Start mit Windows
+- Windows-Deinstallation
+- getrennte persistente Daten
+- Abfrage beim Deinstallieren, ob persistente Daten ebenfalls entfernt
+  werden sollen
+
+### Windows Portable
+
+Die Portable-Version benötigt keine Installation.
+
+ZIP-Datei entpacken und den MediaHub Compute Node direkt starten.
+
+Sie eignet sich insbesondere für:
+
+- Tests
+- portable Nutzung
+- Rechner, auf denen keine dauerhafte Installation gewünscht ist
+
+Lokale Einstellungen, Pairing-Daten, API-Token, Logs, Modelle,
+Runtime-Dateien und andere benutzerspezifische Daten werden nicht in den
+veröffentlichten Portable-Paketen mitgeliefert.
+
+## Windows-Port
+
+Der Windows Compute Node verwendet standardmäßig:
+
+`8766`
+
+Der Raspberry-Pi-/Linux-AI-Node verwendet weiterhin:
+
+`8765`
+
+Dadurch können beide Knotentypen unabhängig voneinander betrieben werden.
+
+## Windows-Funktionen
+
+Der Windows Compute Node unterstützt bzw. bereitet unter anderem vor:
+
+- eigenständige Windows-EXE
+- Hardware- und Capability-Erkennung
+- CPU-/GPU-Auswahl
+- `.mhaiplugin`-Unterstützung
+- authentifizierte Verbindung zu MediaHub
+- Job-Warteschlange
+- Health- und Statusinformationen
+- Windows-Tray-Oberfläche
+- lokale Speech-to-Text-Ausführung
+
+## Speech-to-Text und isolierte Python-Runtime
+
+Für lokale Speech-to-Text-Aufgaben kann der Windows Compute Node eine vom
+Hauptprogramm getrennte Python-Runtime verwenden.
+
+Aktueller Runtime-Stand:
+
+- Python 3.12.10 Embedded x64
+- Download ausschließlich von `python.org`
+- Integritätsprüfung über fest hinterlegte SHA-256-Prüfsumme
+- pip-Bootstrap ausschließlich über HTTPS von `bootstrap.pypa.io`
+- Speech-Engine: `faster-whisper`
+- CPU- und GPU-Ausführung
+- automatische Accelerator-Auswahl
+- NVIDIA-CUDA-Nutzung nur bei geeigneter vorhandener Umgebung
+
+Heruntergeladene Runtime-, Modell-, Cache- und Paketdateien liegen
+außerhalb des eingecheckten Quellbestands und sind nicht Bestandteil der
+Release-Pakete.
+
+## Hardwareerkennung unter Windows
+
+Die Hardwareerkennung berücksichtigt CPU, dedizierte GPUs sowie
+integrierte GPU/APU-Grafik.
+
+Für die Erkennung können vorhandene Windows- und Treiberkomponenten
+verwendet werden:
+
+- Windows CIM/WMI
+- DXDiag
+- `nvidia-smi` bei NVIDIA-GPUs
+
+GPU-Speicherwerte unterscheiden zwischen dediziertem und gemeinsam
+verwendetem Speicher.
+
+## Windows-Version
+
+Der Windows Compute Node besitzt eine eigene Komponenten-Version.
+
+Die Windows-Version muss deshalb nicht mit der Version des
+Raspberry-Pi-/Linux-AI-Nodes übereinstimmen.
+
+Ein gemeinsames GitHub-Release kann beispielsweise enthalten:
+
+- MediaHub-AI-Node `v0.8.x`
+- MediaHub Compute Node für Windows `v0.1.x`
