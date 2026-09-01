@@ -7,6 +7,7 @@ Es ist für den lokalen Aufruf und für GitHub Actions vorgesehen.
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import shutil
 import subprocess
@@ -27,8 +28,6 @@ INCLUDED = (
     "scripts",
     ".env.example",
     "CHANGELOG.md",
-    "CODE_OF_CONDUCT.md",
-    "CONTRIBUTING.md",
     "LICENSE",
     "README.md",
     "RELEASE_NOTES_PENDING.md",
@@ -202,6 +201,16 @@ def verify_zip(archive_path: Path) -> None:
 
 
 def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="MediaHub-AI-Node Release-Prüfung und Paketbau"
+    )
+    parser.add_argument(
+        "--skip-tests",
+        action="store_true",
+        help="Syntax-, Pytest- und Ruff-Prüfungen überspringen.",
+    )
+    args = parser.parse_args()
+
     try:
         print("MediaHub-AI-Node – Release-Prüfung und Paketbau")
         print(f"Projektordner: {ROOT}")
@@ -216,18 +225,25 @@ def main() -> int:
             "Drittanbieter-Lizenzen prüfen",
         )
 
-        run_check(
-            [sys.executable, "-m", "compileall", "-q", "app", "tests"],
-            "Python-Syntax prüfen",
-        )
-        run_check(
-            [sys.executable, "-m", "pytest"],
-            "Tests ausführen",
-        )
-        run_check(
-            [sys.executable, "-m", "ruff", "check", "."],
-            "Ruff-Codeprüfung",
-        )
+        if args.skip_tests:
+            print(
+                "\n== Tests übersprungen ==\n"
+                "Syntax-, Pytest- und Ruff-Prüfungen wurden "
+                "explizit übersprungen."
+            )
+        else:
+            run_check(
+                [sys.executable, "-m", "compileall", "-q", "app", "tests"],
+                "Python-Syntax prüfen",
+            )
+            run_check(
+                [sys.executable, "-m", "pytest"],
+                "Tests ausführen",
+            )
+            run_check(
+                [sys.executable, "-m", "ruff", "check", "."],
+                "Ruff-Codeprüfung",
+            )
 
         if RELEASE_DIR.exists():
             shutil.rmtree(RELEASE_DIR)
