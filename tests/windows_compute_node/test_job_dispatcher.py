@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 from windows_compute_node.jobs.queue import (
     JobQueue,
 )
@@ -15,9 +18,16 @@ def make_dispatcher():
     jobs = JobQueue()
     workers = WorkerRegistry()
 
+    runtime_dir = Path(
+        tempfile.mkdtemp(
+            prefix="mediahub-compute-test-",
+        )
+    )
+
     dispatcher = JobDispatcher(
         jobs=jobs,
         workers=workers,
+        runtime_dir=runtime_dir,
     )
 
     return jobs, workers, dispatcher

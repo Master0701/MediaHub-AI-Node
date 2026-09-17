@@ -12,6 +12,7 @@ from sqlalchemy.orm import Session
 from app.models import Job
 
 VALID_JOB_STATUSES = {
+    "preparing",
     "queued",
     "running",
     "completed",
@@ -68,15 +69,23 @@ def create_job(
     db: Session,
     job_type: str,
     payload: dict[str, Any] | None = None,
+    *,
+    initial_status: str = "queued",
 ) -> Job:
     normalized_job_type = job_type.strip()
+    normalized_status = initial_status.strip().lower()
 
     if not normalized_job_type:
         raise ValueError("Der Job-Typ darf nicht leer sein.")
 
+    if normalized_status not in VALID_JOB_STATUSES:
+        raise ValueError(
+            f"Ungültiger initialer Job-Status: {initial_status}"
+        )
+
     job = Job(
         job_type=normalized_job_type,
-        status="queued",
+        status=normalized_status,
         progress=0,
         payload=serialize_json(payload or {}),
         result=None,
@@ -95,6 +104,32 @@ def get_job(
     job_id: int,
 ) -> Job | None:
     return db.get(Job, job_id)
+
+
+def finalize_preparing_job(
+    db: Session,
+    job: Job,
+    payload_updates: dict[str, Any],
+) -> Job:
+    if job.status != "preparing":
+        raise ValueError(
+            f"Job {job.id} befindet sich nicht im Status preparing."
+        )
+
+    payload = deserialize_json(job.payload, "raw") or {}
+
+    if not isinstance(payload, dict):
+        payload = {}
+
+    payload.update(payload_updates)
+    job.payload = serialize_json(payload)
+    job.status = "queued"
+    job.progress = 0
+    job.error = None
+
+    db.commit()
+    db.refresh(job)
+    return job
 
 
 def list_jobs(

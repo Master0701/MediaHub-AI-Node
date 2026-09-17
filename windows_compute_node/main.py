@@ -184,6 +184,8 @@ def main() -> int:
         exist_ok=True,
     )
 
+    os.environ["MEDIAHUB_COMPUTE_RUNTIME"] = str(runtime)
+
     log_path = _configure_logging(runtime)
     logger = logging.getLogger(
         "windows_compute_node"

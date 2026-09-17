@@ -96,6 +96,37 @@ class JobQueue:
 
             return deepcopy(jobs)
 
+    def update_payload(
+        self,
+        job_id: str,
+        values: dict[str, Any],
+    ) -> dict[str, Any]:
+        if not isinstance(values, dict):
+            raise ValueError(
+                "Payload-Aktualisierung muss ein Dictionary sein."
+            )
+
+        with self._lock:
+            job = self._jobs.get(
+                str(job_id)
+            )
+
+            if job is None:
+                raise KeyError(job_id)
+
+            if job["status"] != "queued":
+                raise ValueError(
+                    "Payload kann nur bei wartenden Jobs geändert werden."
+                )
+
+            job["payload"].update(
+                deepcopy(values)
+            )
+            job["updated_at"] = time.time()
+
+            return deepcopy(job)
+
+
     def cancel(
         self,
         job_id: str,

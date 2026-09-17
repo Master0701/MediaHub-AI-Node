@@ -80,6 +80,61 @@ class ComputePluginLoader:
                     ),
                 }
 
+                try:
+                    manifest = json.loads(
+                        (
+                            plugin_dir
+                            / "plugin.json"
+                        ).read_text(
+                            encoding="utf-8"
+                        )
+                    )
+
+                    if isinstance(manifest, dict):
+                        plugin_id = str(
+                            manifest.get("id")
+                            or ""
+                        ).strip()
+
+                        name = str(
+                            manifest.get("name")
+                            or plugin_id
+                        ).strip()
+
+                        version = str(
+                            manifest.get("version")
+                            or ""
+                        ).strip()
+
+                        plugin_type = str(
+                            manifest.get("type")
+                            or manifest.get(
+                                "plugin_type"
+                            )
+                            or ""
+                        ).strip()
+
+                        if plugin_id:
+                            result[
+                                "plugin_id"
+                            ] = plugin_id
+
+                        if name:
+                            result["name"] = name
+
+                        if version:
+                            result[
+                                "version"
+                            ] = version
+
+                        if plugin_type:
+                            result[
+                                "type"
+                            ] = plugin_type
+
+                except Exception:
+                    pass
+
             results.append(result)
 
         return results

@@ -21,6 +21,9 @@ from windows_compute_node.config.settings import (
 from windows_compute_node.hardware.capabilities import (
     get_capabilities,
 )
+from windows_compute_node.jobs.input_cleanup import (
+    JobInputCleanup,
+)
 from windows_compute_node.jobs.queue import (
     JobQueue,
 )
@@ -55,6 +58,13 @@ class ComputeNodeAPI:
         runtime_dir: Path,
     ) -> None:
         self.runtime_dir = Path(runtime_dir)
+
+        self.input_cleanup = JobInputCleanup(
+            self.runtime_dir
+        )
+        self.orphan_inputs_removed = (
+            self.input_cleanup.cleanup_orphans()
+        )
 
         self.identity = NodeIdentity(
             self.runtime_dir
@@ -91,6 +101,7 @@ class ComputeNodeAPI:
         self.dispatcher = JobDispatcher(
             jobs=self.jobs,
             workers=self.workers,
+            runtime_dir=self.runtime_dir,
         )
 
         self.plugin_installer = (
@@ -129,6 +140,7 @@ class ComputeNodeAPI:
         self.dispatcher = JobDispatcher(
             jobs=self.jobs,
             workers=self.workers,
+            runtime_dir=self.runtime_dir,
         )
 
         self.plugin_loader = (
@@ -639,6 +651,189 @@ class RequestHandler(
 
         if (
             path.startswith("/jobs/")
+            and path.endswith("/input")
+        ):
+            if not self._require_auth():
+                return
+
+            job_id = path[
+                len("/jobs/"):
+                -len("/input")
+            ].strip("/")
+
+            if not job_id:
+                self._send_json(
+                    400,
+                    {
+                        "error": "invalid_job_id",
+                    },
+                )
+                return
+
+            job = self.api.jobs.get(
+                job_id
+            )
+
+            if job is None:
+                self._send_json(
+                    404,
+                    {
+                        "error": "job_not_found",
+                        "job_id": job_id,
+                    },
+                )
+                return
+
+            if job.get("status") != "queued":
+                self._send_json(
+                    409,
+                    {
+                        "error": "job_not_queued",
+                        "job_id": job_id,
+                    },
+                )
+                return
+
+            filename = str(
+                self.headers.get(
+                    "X-Input-Filename",
+                    "",
+                )
+            ).strip()
+
+            safe_name = Path(
+                filename
+            ).name
+
+            if (
+                not safe_name
+                or safe_name != filename
+            ):
+                self._send_json(
+                    400,
+                    {
+                        "error": "invalid_input_filename",
+                    },
+                )
+                return
+
+            try:
+                content_length = int(
+                    self.headers.get(
+                        "Content-Length",
+                        "0",
+                    )
+                )
+            except ValueError:
+                content_length = 0
+
+            if content_length <= 0:
+                self._send_json(
+                    400,
+                    {
+                        "error": "empty_input",
+                    },
+                )
+                return
+
+            upload_dir = (
+                self.api.runtime_dir
+                / "job_inputs"
+                / job_id
+            )
+
+            upload_dir.mkdir(
+                parents=True,
+                exist_ok=True,
+            )
+
+            target = (
+                upload_dir
+                / safe_name
+            )
+
+            temporary = target.with_suffix(
+                target.suffix + ".part"
+            )
+
+            if temporary.exists():
+                temporary.unlink()
+
+            remaining = content_length
+
+            try:
+                with temporary.open(
+                    "wb"
+                ) as handle:
+                    while remaining > 0:
+                        chunk = self.rfile.read(
+                            min(
+                                remaining,
+                                1024 * 1024,
+                            )
+                        )
+
+                        if not chunk:
+                            raise ValueError(
+                                "Eingabedatei wurde nicht vollständig übertragen."
+                            )
+
+                        handle.write(
+                            chunk
+                        )
+                        remaining -= len(
+                            chunk
+                        )
+
+                temporary.replace(
+                    target
+                )
+
+                updated = (
+                    self.api.jobs.update_payload(
+                        job_id,
+                        {
+                            "input": str(
+                                target
+                            ),
+                            "input_info": {
+                                "filename": safe_name,
+                                "size": content_length,
+                            },
+                        },
+                    )
+                )
+
+            except Exception as error:
+                if temporary.exists():
+                    temporary.unlink()
+
+                if target.exists():
+                    target.unlink()
+
+                self._send_json(
+                    400,
+                    {
+                        "error": "input_upload_failed",
+                        "detail": str(error),
+                    },
+                )
+                return
+
+            self._send_json(
+                200,
+                {
+                    "job": updated,
+                    "input": (
+                        updated.get("payload", {})
+                        .get("input", {})
+                    ),
+                },
+            )
+            return
+
+        if (
+            path.startswith("/jobs/")
             and path.endswith("/execute")
         ):
             if not self._require_auth():
@@ -804,6 +999,11 @@ class RequestHandler(
             job = self.api.jobs.cancel(
                 job_id
             )
+
+            if job is not None:
+                self.api.dispatcher._cleanup_input(
+                    job_id
+                )
 
             if job is None:
                 self._send_json(
