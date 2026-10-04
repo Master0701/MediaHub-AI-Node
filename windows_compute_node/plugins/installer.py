@@ -90,7 +90,7 @@ class ComputePluginInstaller:
                 manifest = json.loads(
                     archive.read(
                         manifest_name
-                    ).decode("utf-8")
+                    ).decode("utf-8-sig")
                 )
             except (
                 UnicodeDecodeError,
@@ -280,15 +280,15 @@ class ComputePluginInstaller:
                 "Plugin-ID fehlt."
             )
 
-        # Plugin-IDs dürfen niemals als Pfade benutzt
-        # werden können.
+        # Plugin-IDs dÃ¼rfen niemals als Pfade benutzt
+        # werden kÃ¶nnen.
         if (
             plugin_id in {".", ".."}
             or "/" in plugin_id
             or "\\" in plugin_id
         ):
             raise PluginInstallError(
-                "Ungültige Plugin-ID."
+                "UngÃ¼ltige Plugin-ID."
             )
 
         target = (
@@ -304,7 +304,7 @@ class ComputePluginInstaller:
             target.relative_to(plugin_root)
         except ValueError as exc:
             raise PluginInstallError(
-                "Plugin-Pfad liegt außerhalb "
+                "Plugin-Pfad liegt auÃŸerhalb "
                 "des Plugin-Verzeichnisses."
             ) from exc
 
@@ -324,7 +324,7 @@ class ComputePluginInstaller:
             try:
                 manifest = json.loads(
                     manifest_path.read_text(
-                        encoding="utf-8"
+                        encoding="utf-8-sig"
                     )
                 )
             except (

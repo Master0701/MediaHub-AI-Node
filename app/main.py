@@ -6,6 +6,7 @@ from pathlib import Path
 import psutil
 from fastapi import FastAPI
 
+from app.api.activity import router as activity_router
 from app.api.analyzers import router as analyzers_router
 from app.api.cache import router as cache_router
 from app.api.jobs import router as jobs_router
@@ -17,10 +18,11 @@ from app.api.plugins import router as plugins_router
 from app.api.providers import router as providers_router
 from app.api.quality import router as quality_router
 from app.api.references import router as references_router
+from app.api.status_page import router as status_page_router
 from app.config import APP_NAME, APP_VERSION, BASE_DIR
 from app.database import Base, engine
 from app.jobs.worker import start_worker, stop_worker
-from app.plugins.runtime import plugin_manager
+from app.plugins.runtime import node_activity, plugin_manager
 from app.services.provider_service import ensure_default_providers
 
 logging.basicConfig(
@@ -51,6 +53,9 @@ async def lifespan(app: FastAPI):
         len(loaded),
     )
 
+    node_activity.wake()
+    node_activity.start_watcher()
+
     for record in discovered:
         if record.error:
             logger.warning(
@@ -63,6 +68,7 @@ async def lifespan(app: FastAPI):
     try:
         yield
     finally:
+        node_activity.stop_watcher()
         stop_worker()
 
 
@@ -73,6 +79,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+app.include_router(status_page_router)
+app.include_router(activity_router)
 app.include_router(analyzers_router)
 app.include_router(jobs_router)
 app.include_router(cache_router)

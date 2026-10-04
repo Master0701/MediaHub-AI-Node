@@ -235,6 +235,7 @@ def main() -> int:
     )
 
     server_thread.start()
+    api.activity.start_watcher()
 
     logger.info(
         "Compute-Node-API gestartet: %s:%s",
@@ -258,6 +259,7 @@ def main() -> int:
             "MediaHub Compute Node wird beendet."
         )
 
+        api.activity.stop_watcher()
         server.shutdown()
         server.server_close()
 

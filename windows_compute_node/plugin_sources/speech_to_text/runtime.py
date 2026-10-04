@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import importlib.util
 import json
 import os
 import subprocess
@@ -17,35 +16,18 @@ REQUIRED_PACKAGES = {
 
 
 def _load_python_runtime_provider():
-    provider_file = (
-        Path(__file__).resolve().parent
-        / "python_runtime.py"
-    )
-
-    spec = importlib.util.spec_from_file_location(
-        "mediahub_speech_python_runtime",
-        provider_file,
-    )
-
-    if (
-        spec is None
-        or spec.loader is None
-    ):
-        raise RuntimeError(
-            "Speech Python-Runtime-Provider "
-            "konnte nicht geladen werden."
+    """Load the shared MediaHub Compute Python runtime provider."""
+    try:
+        from windows_compute_node.runtime_support import (
+            python_runtime,
         )
+    except ImportError as exc:
+        raise RuntimeError(
+            "Gemeinsamer MediaHub Python-Runtime-Provider "
+            "konnte nicht geladen werden."
+        ) from exc
 
-    module = importlib.util.module_from_spec(
-        spec
-    )
-
-    spec.loader.exec_module(
-        module
-    )
-
-    return module
-
+    return python_runtime
 
 def runtime_base_python() -> Path:
     provider = (

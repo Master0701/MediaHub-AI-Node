@@ -7,6 +7,7 @@ from app.database import SessionLocal
 from app.jobs.registry import job_handler_registry
 from app.jobs.utils import decode_payload
 from app.models import Job
+from app.plugins.runtime import node_activity
 from app.services.job_service import (
     get_next_queued_job,
     mark_job_completed,
@@ -53,11 +54,16 @@ def process_job(
             value,
         )
 
-    return handler.execute(
-        db=db,
-        payload=payload,
-        progress_callback=report_progress,
-    )
+    node_activity.begin_job()
+
+    try:
+        return handler.execute(
+            db=db,
+            payload=payload,
+            progress_callback=report_progress,
+        )
+    finally:
+        node_activity.end_job()
 
 
 def worker_loop() -> None:

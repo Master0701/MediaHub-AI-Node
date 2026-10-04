@@ -1,4 +1,4 @@
-﻿"""Job dispatcher for Compute-Node workers."""
+"""Job dispatcher for Compute-Node workers."""
 
 from __future__ import annotations
 
@@ -22,9 +22,11 @@ class JobDispatcher:
         jobs: JobQueue,
         workers: WorkerRegistry,
         runtime_dir,
+        activity=None,
     ) -> None:
         self.jobs = jobs
         self.workers = workers
+        self.activity = activity
         self.input_cleanup = JobInputCleanup(
             runtime_dir
         )
@@ -85,7 +87,13 @@ class JobDispatcher:
             "running",
         )
 
+        activity_started = False
+
         try:
+            if self.activity is not None:
+                self.activity.begin_job()
+                activity_started = True
+
             result = handler(
                 {
                     "job_id": job_id,
@@ -113,6 +121,13 @@ class JobDispatcher:
 
             self._cleanup_input(job_id)
             return failed_job
+
+        finally:
+            if (
+                activity_started
+                and self.activity is not None
+            ):
+                self.activity.end_job()
 
         completed_job = self.jobs.set_status(
             job_id,

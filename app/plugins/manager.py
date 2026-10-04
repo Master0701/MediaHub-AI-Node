@@ -1,4 +1,4 @@
-"""Zentrale Verwaltung der AI-Node-Plugins."""
+﻿"""Zentrale Verwaltung der AI-Node-Plugins."""
 
 from __future__ import annotations
 
@@ -30,6 +30,26 @@ class PluginManager:
         return self.loader.discover()
 
     def load_enabled(self) -> tuple[PluginRecord, ...]:
+        return self.loader.load_enabled()
+
+    def sleep_loaded(self) -> tuple[PluginRecord, ...]:
+        """Entlädt geladene Plugins ohne ihren Aktivierungszustand zu ändern."""
+        loaded = [
+            record
+            for record in self.registry.all()
+            if record.loaded
+        ]
+
+        slept: list[PluginRecord] = []
+
+        for record in reversed(loaded):
+            self.loader.unload(record)
+            slept.append(record)
+
+        return tuple(slept)
+
+    def wake_enabled(self) -> tuple[PluginRecord, ...]:
+        """Lädt weiterhin aktivierte Plugins nach dem Ruhemodus erneut."""
         return self.loader.load_enabled()
 
     def enable(self, plugin_id: str) -> PluginRecord:

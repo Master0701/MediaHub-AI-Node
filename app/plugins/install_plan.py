@@ -13,6 +13,7 @@ class InstallActionType(StrEnum):
 
     PYTHON_PACKAGE = "python_package"
     SYSTEM_TOOL = "system_tool"
+    RUNTIME = "runtime"
     AI_PLUGIN = "ai_plugin"
 
 

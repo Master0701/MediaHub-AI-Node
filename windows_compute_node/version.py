@@ -1,3 +1,3 @@
 """Version information for the Windows Compute Node."""
 
-WINDOWS_COMPUTE_NODE_VERSION = "0.1.1"
+WINDOWS_COMPUTE_NODE_VERSION = "0.1.2"

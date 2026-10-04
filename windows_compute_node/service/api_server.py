@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import html as html_lib
 import json
 import tempfile
 from http.server import (
@@ -12,6 +13,7 @@ from http.server import (
 from pathlib import Path
 from typing import Any
 
+from shared.node_activity import NodeActivityController
 from windows_compute_node.config.node_identity import (
     NodeIdentity,
 )
@@ -130,6 +132,18 @@ class ComputeNodeAPI:
             self.plugin_loader.load_all()
         )
 
+        self.activity = NodeActivityController(
+            idle_timeout_seconds=900.0,
+            sleep_callback=(
+                self.plugin_loader.sleep_all
+            ),
+            wake_callback=(
+                self.plugin_loader.wake_all
+            ),
+        )
+
+        self.dispatcher.activity = self.activity
+
     def reload_plugins(
         self,
     ) -> list[dict[str, Any]]:
@@ -159,6 +173,15 @@ class ComputeNodeAPI:
         self.plugin_load_results = (
             self.plugin_loader.load_all()
         )
+
+        self.activity.sleep_callback = (
+            self.plugin_loader.sleep_all
+        )
+        self.activity.wake_callback = (
+            self.plugin_loader.wake_all
+        )
+
+        self.dispatcher.activity = self.activity
 
         return self.plugin_load_results
 
@@ -429,9 +452,27 @@ class RequestHandler(
 
     def do_POST(self) -> None:
         path = self.path.split(
+
             "?",
             1,
         )[0].rstrip("/")
+
+        if path == "/activity/heartbeat":
+            if not self._require_auth():
+                return
+
+            self.api.activity.mediahub_heartbeat()
+
+            self._send_json(
+                200,
+                {
+                    "ok": True,
+                    "activity": (
+                        self.api.activity.status()
+                    ),
+                },
+            )
+            return
 
         if path == "/plugins/uninstall":
             if not self._require_auth():
@@ -1069,6 +1110,34 @@ class RequestHandler(
             )
             return
 
+        if path == "/plugins":
+            if not self._require_auth():
+                return
+
+            self._send_json(
+                200,
+                {
+                    "plugins": (
+                        self.api.plugin_load_results
+                    )
+                },
+            )
+            return
+
+        if path == "/workers":
+            if not self._require_auth():
+                return
+
+            self._send_json(
+                200,
+                {
+                    "workers": (
+                        self.api.workers.list_workers()
+                    )
+                },
+            )
+            return
+
         if path == "/jobs":
             if not self._require_auth():
                 return
@@ -1156,6 +1225,72 @@ class RequestHandler(
         info = self.api.capabilities_info()
         identity = self.api.identity_info()
 
+        plugin_results = list(
+            getattr(self.api, "plugin_load_results", []) or []
+        )
+        plugin_rows = []
+
+        for plugin in plugin_results:
+            name = str(
+                plugin.get("name")
+                or plugin.get("plugin_id")
+                or "Unbekannt"
+            )
+            version = str(plugin.get("version") or "-")
+            loaded = plugin.get("loaded")
+            error = str(
+                plugin.get("error")
+                or plugin.get("detail")
+                or ""
+            ).strip()
+            workers = plugin.get("workers") or []
+
+            state_class = "starting"
+            state_text = "Wird geprüft"
+
+            if loaded is True:
+                state_class = "ready"
+                state_text = "Bereit"
+
+            if error:
+                state_class = "error"
+                state_text = "Fehler"
+
+            worker_text = (
+                ", ".join(str(item) for item in workers)
+                or "Keine"
+            )
+
+            error_html = ""
+
+            if error:
+                error_html = (
+                    '<div class="plugin-error">'
+                    + html_lib.escape(error)
+                    + "</div>"
+                )
+
+            plugin_rows.append(
+                '<div class="plugin-row">'
+                f'<span class="plugin-dot {state_class}"></span>'
+                '<div class="plugin-info">'
+                f"<strong>{html_lib.escape(name)}</strong>"
+                f"<span>v{html_lib.escape(version)} · {state_text}</span>"
+                f"<small>Worker: {html_lib.escape(worker_text)}</small>"
+                f"{error_html}"
+                "</div>"
+                "</div>"
+            )
+
+        plugins_html = "".join(plugin_rows)
+
+        if not plugins_html:
+            plugins_html = (
+                '<div class="plugin-empty">'
+                "Keine Plugins installiert oder geladen."
+                "</div>"
+            )
+
         accelerators = info.get("accelerators") or []
         gpu_names = ", ".join(
             str(item.get("name", "")).strip()
@@ -1166,6 +1301,76 @@ class RequestHandler(
         platform_name = str(info.get("platform") or "Windows")
         machine = str(info.get("machine") or "AMD64")
         node_id = str(identity.get("node_id") or "Unbekannt")
+
+        activity_status = self.api.activity.status()
+
+        node_state = str(
+            activity_status.get("state") or "ready"
+        )
+
+        node_state_class = "ready"
+        node_state_text = "Aktiv"
+        node_state_detail = "Compute Node ist betriebsbereit"
+
+        if node_state == "sleeping":
+            node_state_class = "offline"
+            node_state_text = "Ruhemodus"
+            node_state_detail = "Plugins befinden sich im Ruhemodus"
+
+        if node_state == "waking":
+            node_state_class = "starting"
+            node_state_text = "Wird aktiviert"
+            node_state_detail = "Plugins werden aufgeweckt"
+
+        if node_state == "error":
+            node_state_class = "error"
+            node_state_text = "Fehler"
+            node_state_detail = str(
+                activity_status.get("last_error")
+                or "Lifecycle-Fehler"
+            )
+
+        mediahub_connected = bool(
+            activity_status.get("mediahub_connected")
+        )
+
+        mediahub_state_class = "offline"
+        mediahub_state_text = "Nicht verbunden"
+
+        if mediahub_connected:
+            mediahub_state_class = "ready"
+            mediahub_state_text = "Verbunden"
+
+        active_jobs = int(
+            activity_status.get("active_jobs") or 0
+        )
+
+        idle_seconds = activity_status.get("idle_seconds")
+        idle_timeout = float(
+            activity_status.get("idle_timeout_seconds") or 0.0
+        )
+
+        last_seen_text = "Noch kein Heartbeat"
+
+        if idle_seconds is not None:
+            last_seen_text = f"Vor {int(idle_seconds)} Sekunden"
+
+        sleep_text = "Wartet auf MediaHub"
+
+        if idle_seconds is not None:
+            remaining = max(
+                0,
+                int(idle_timeout - float(idle_seconds)),
+            )
+            remaining_minutes = remaining // 60
+            remaining_seconds = remaining % 60
+            sleep_text = (
+                f"{remaining_minutes:02d}:"
+                f"{remaining_seconds:02d} Minuten"
+            )
+
+        if node_state == "sleeping":
+            sleep_text = "Aktiv"
 
         html = f"""<!doctype html>
 <html lang="de">
@@ -1266,6 +1471,81 @@ h1 {{
     font-weight: 600;
     overflow-wrap: anywhere;
 }}
+.plugin-status-section {{
+    margin-top: 22px;
+    background: #151b24;
+    border-radius: 14px;
+    overflow: hidden;
+}}
+
+.plugin-status-title {{
+    padding: 16px 20px;
+    font-size: 18px;
+    font-weight: 700;
+    border-bottom: 1px solid #212a36;
+}}
+
+.plugin-row {{
+    display: flex;
+    gap: 14px;
+    align-items: flex-start;
+    padding: 15px 20px;
+    border-bottom: 1px solid #212a36;
+}}
+
+.plugin-row:last-child {{
+    border-bottom: 0;
+}}
+
+.plugin-dot {{
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-top: 5px;
+    flex: 0 0 auto;
+}}
+
+.plugin-dot.ready {{
+    background: #43d17b;
+    box-shadow: 0 0 14px rgba(67, 209, 123, 0.6);
+}}
+
+.plugin-dot.starting {{
+    background: #e8bd45;
+    box-shadow: 0 0 14px rgba(232, 189, 69, 0.5);
+}}
+
+.plugin-dot.offline {{
+    background: #697687;
+    box-shadow: 0 0 10px rgba(105, 118, 135, 0.35);
+}}
+
+.plugin-dot.error {{
+    background: #ef5b5b;
+    box-shadow: 0 0 14px rgba(239, 91, 91, 0.55);
+}}
+
+.plugin-info {{
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}}
+
+.plugin-info span,
+.plugin-info small {{
+    color: #8e9aaa;
+}}
+
+.plugin-error {{
+    color: #ff8080;
+    margin-top: 4px;
+    overflow-wrap: anywhere;
+}}
+
+.plugin-empty {{
+    padding: 18px 20px;
+    color: #8e9aaa;
+}}
 .footer {{
     margin-top: 20px;
     color: #697687;
@@ -1284,12 +1564,31 @@ h1 {{
     </div>
 
     <div class="status">
-        <div class="dot"></div>
-        <strong>Läuft</strong>
-        <span>Compute Node ist betriebsbereit</span>
+        <span class="plugin-dot {node_state_class}"></span>
+        <strong>{node_state_text}</strong>
+        <span>{html_lib.escape(node_state_detail)}</span>
     </div>
 
     <div class="details">
+        <div class="row">
+            <div class="label">MediaHub</div>
+            <div class="value">
+                <span class="plugin-dot {mediahub_state_class}"></span>
+                {mediahub_state_text}
+            </div>
+        </div>
+        <div class="row">
+            <div class="label">Letzte Aktivität</div>
+            <div class="value">{last_seen_text}</div>
+        </div>
+        <div class="row">
+            <div class="label">Aktive Jobs</div>
+            <div class="value">{active_jobs}</div>
+        </div>
+        <div class="row">
+            <div class="label">Ruhemodus</div>
+            <div class="value">{sleep_text}</div>
+        </div>
         <div class="row">
             <div class="label">Node-ID</div>
             <div class="value">{node_id}</div>
@@ -1308,6 +1607,12 @@ h1 {{
         </div>
     </div>
 
+    <section class="plugin-status-section">
+        <div class="plugin-status-title">
+            Installierte Plugins
+        </div>
+        {plugins_html}
+    </section>
     <div class="footer">
         Lokale Statusseite · API-Token wird nicht angezeigt.
     </div>
@@ -1404,6 +1709,7 @@ def run_server(
     )
 
     try:
+        api.activity.start_watcher()
         server.serve_forever()
     except KeyboardInterrupt:
         print()
@@ -1411,4 +1717,5 @@ def run_server(
             "Compute-Node API wird beendet."
         )
     finally:
+        api.activity.stop_watcher()
         server.server_close()

@@ -9,10 +9,17 @@ from app.config import (
 from app.plugins.installer import PluginInstaller
 from app.plugins.manager import PluginManager
 from app.plugins.plan_store import PluginPlanStore
+from shared.node_activity import NodeActivityController
 
 plugin_manager = PluginManager(
     plugin_root=PLUGINS_DIR,
     state_path=PLUGIN_STATE_FILE,
+)
+
+node_activity = NodeActivityController(
+    idle_timeout_seconds=15 * 60,
+    sleep_callback=plugin_manager.sleep_loaded,
+    wake_callback=plugin_manager.wake_enabled,
 )
 
 plugin_installer = PluginInstaller(

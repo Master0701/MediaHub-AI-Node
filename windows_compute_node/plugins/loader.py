@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import sys
 from pathlib import Path
 from typing import Any
 
@@ -35,6 +36,82 @@ class ComputePluginLoader:
         # vollständig JSON-serialisierbar bleiben.
         self.instances: dict[str, object] = {}
 
+    def _call_lifecycle(
+        self,
+        method_name: str,
+    ) -> dict[str, str]:
+        errors: dict[str, str] = {}
+
+        for plugin_id, instance in self.instances.items():
+            method = getattr(
+                instance,
+                method_name,
+                None,
+            )
+
+            if not callable(method):
+                continue
+
+            try:
+                method()
+            except Exception as exc:
+                errors[plugin_id] = (
+                    f"{type(exc).__name__}: {exc}"
+                )
+
+        return errors
+
+    def sleep_all(
+        self,
+    ) -> dict[str, str]:
+        """Release heavy resources of loaded plugins."""
+
+        return self._call_lifecycle("sleep")
+
+    def wake_all(
+        self,
+    ) -> dict[str, str]:
+        """Prepare sleeping plugins for execution."""
+
+        return self._call_lifecycle("wake")
+
+    def shutdown_all(
+        self,
+    ) -> dict[str, str]:
+        """Shut down loaded plugin instances."""
+
+        errors = self._call_lifecycle("shutdown")
+
+        for plugin_id, instance in self.instances.items():
+            if plugin_id in errors:
+                continue
+
+            shutdown = getattr(
+                instance,
+                "shutdown",
+                None,
+            )
+
+            if callable(shutdown):
+                continue
+
+            close = getattr(
+                instance,
+                "close",
+                None,
+            )
+
+            if not callable(close):
+                continue
+
+            try:
+                close()
+            except Exception as exc:
+                errors[plugin_id] = (
+                    f"{type(exc).__name__}: {exc}"
+                )
+
+        return errors
     def discover(
         self,
     ) -> list[Path]:
@@ -86,7 +163,7 @@ class ComputePluginLoader:
                             plugin_dir
                             / "plugin.json"
                         ).read_text(
-                            encoding="utf-8"
+                            encoding="utf-8-sig"
                         )
                     )
 
@@ -157,7 +234,7 @@ class ComputePluginLoader:
         try:
             manifest = json.loads(
                 manifest_path.read_text(
-                    encoding="utf-8"
+                    encoding="utf-8-sig"
                 )
             )
         except json.JSONDecodeError as exc:
@@ -298,7 +375,27 @@ class ComputePluginLoader:
             )
         )
 
-        spec.loader.exec_module(module)
+        plugin_import_path = str(plugin_root)
+        path_was_present = (
+            plugin_import_path in sys.path
+        )
+
+        if not path_was_present:
+            sys.path.insert(
+                0,
+                plugin_import_path,
+            )
+
+        try:
+            spec.loader.exec_module(module)
+        finally:
+            if not path_was_present:
+                try:
+                    sys.path.remove(
+                        plugin_import_path
+                    )
+                except ValueError:
+                    pass
 
         before = {
             item["worker_id"]

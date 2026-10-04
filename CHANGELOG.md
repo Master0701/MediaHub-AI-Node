@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.8.22
+
+- Raspberry-Pi-AI-Node um Heartbeat-basierte MediaHub-Aktivitätserkennung erweitert.
+- Automatischen Plugin-Ruhemodus nach 15 Minuten Inaktivität ergänzt.
+- Automatisches Wiederaufwecken der Plugins bei neuer MediaHub-Aktivität ergänzt.
+- Lokale, im Heimnetz erreichbare AI-Node-Statusseite unter `/status` ergänzt.
+- Statusanzeige für Verbindung, letzte Aktivität, Jobs, Ruhemodus, Plattform und Plugins ergänzt.
+- Gemeinsame Node-Activity- und Runtime-Grundlagen für AI Node und Windows Compute Node erweitert.
+- Windows-Compute-Node-Plugin-, Worker- und Speech-Runtime weiter stabilisiert.
+
 ## v0.8.18
 
 - Vollständige Drittanbieter-Lizenzverwaltung ergänzt.

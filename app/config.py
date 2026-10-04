@@ -67,6 +67,14 @@ MODELS_DIR = Path(
 )
 
 
+RUNTIMES_DIR = Path(
+    os.getenv(
+        "MEDIAHUB_AI_RUNTIMES_DIR",
+        str(AI_NODE_DIR / "runtimes"),
+    )
+)
+
+
 PLUGINS_DIR = Path(
     os.getenv(
         "MEDIAHUB_AI_NODE_PLUGINS_DIR",

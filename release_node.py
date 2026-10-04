@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import argparse
 import hashlib
@@ -58,6 +58,7 @@ ALLOWED_RELEASE_ROOTS = (
     "licenses/",
     "migrations/",
     "scripts/",
+    "shared/",
     "tests/",
     "windows_compute_node/",
 )
