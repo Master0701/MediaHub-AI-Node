@@ -124,6 +124,7 @@ def health() -> dict:
 
     return {
         "status": "healthy",
+        "version": APP_VERSION,
         "timestamp": datetime.now(UTC).isoformat(),
         "plugins": {
             "detected": len(records),
