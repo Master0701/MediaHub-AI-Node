@@ -1,4 +1,4 @@
-﻿"""Lokale Status-Webseite des MediaHub AI Node."""
+"""Lokale Status-Webseite des MediaHub AI Node."""
 
 from __future__ import annotations
 
@@ -93,11 +93,18 @@ def _plugin_rows() -> str:
         else:
             state = "Deaktiviert"
 
+        dot_class = (
+            "red" if record.error
+            else "green" if record.loaded
+            else "yellow" if record.enabled
+            else "gray"
+        )
+
         rows.append(
             f"""
             <div class="plugin">
                 <div>
-                    <strong>{name}</strong>
+                    <strong><span class="dot plugin-dot {dot_class}"></span>{name}</strong>
                     <div class="muted">
                         v{version} · {html.escape(state)}
                     </div>
@@ -133,6 +140,10 @@ def status_page() -> HTMLResponse:
         else "AI Node ist betriebsbereit"
     )
 
+    node_dot = "yellow" if sleeping else "green"
+    connection_dot = "green" if connected else "red"
+    activity_dot = "green" if connected else "gray"
+
     connection_text = (
         "Verbunden"
         if connected
@@ -144,6 +155,21 @@ def status_page() -> HTMLResponse:
     )
 
     active_jobs = activity.get("active_jobs", 0)
+
+    try:
+        jobs_running = int(active_jobs) > 0
+    except (TypeError, ValueError):
+        jobs_running = False
+
+    jobs_dot = "green" if jobs_running else "gray"
+    sleep_dot = "yellow" if sleeping else "green"
+
+    try:
+        jobs_running = int(active_jobs) > 0
+    except (TypeError, ValueError):
+        jobs_running = False
+
+    jobs_dot = "green" if jobs_running else "gray"
 
     if sleeping:
         sleep_text = "Aktiv"
@@ -234,6 +260,27 @@ h1 {{
 
 .muted {{
     color: #8b949e;
+}}
+
+.dot {{
+    display: inline-block;
+    width: 11px;
+    height: 11px;
+    border-radius: 50%;
+    margin-right: 9px;
+    vertical-align: middle;
+    background: #697687;
+    box-shadow: 0 0 0 3px rgba(255, 255, 255, .04);
+}}
+
+.dot.green {{ background: #43d17b; }}
+.dot.yellow {{ background: #e8bd45; }}
+.dot.red {{ background: #ef5b5b; }}
+.dot.gray {{ background: #697687; }}
+
+.plugin-dot {{
+    width: 10px;
+    height: 10px;
 }}
 
 .grid {{
@@ -331,29 +378,32 @@ footer {{
 </header>
 
 <div class="hero">
-    <div class="hero-title">{html.escape(state_title)}</div>
+    <div class="hero-title"><span class="dot {node_dot}"></span>{html.escape(state_title)}</div>
     <div class="muted">{html.escape(state_text)}</div>
 </div>
 
 <div class="grid">
     <div class="card">
         <div class="label">MediaHub</div>
-        <div class="value">{html.escape(connection_text)}</div>
+        <div class="value">
+        <span class="dot {connection_dot}"></span>
+        {html.escape(connection_text)}
+    </div>
     </div>
 
     <div class="card">
         <div class="label">Letzte Aktivität</div>
-        <div class="value">{html.escape(last_seen)}</div>
+        <div class="value"><span class="dot {activity_dot}"></span>{html.escape(last_seen)}</div>
     </div>
 
     <div class="card">
         <div class="label">Aktive Jobs</div>
-        <div class="value">{html.escape(str(active_jobs))}</div>
+        <div class="value"><span class="dot {jobs_dot}"></span>{html.escape(str(active_jobs))}</div>
     </div>
 
     <div class="card">
         <div class="label">Ruhemodus</div>
-        <div class="value">{html.escape(sleep_text)}</div>
+        <div class="value"><span class="dot {sleep_dot}"></span>{html.escape(sleep_text)}</div>
     </div>
 
     <div class="card">

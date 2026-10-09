@@ -1,5 +1,21 @@
 # MediaHub-AI-Node auf dem Raspberry Pi aktualisieren
 
+
+> **WICHTIG: Alle Update-Schritte der Reihe nach ausführen!**
+>
+> Nur eine zusätzliche Datensicherung ist optional.
+> Alle anderen beschriebenen Update-Schritte müssen ausgeführt werden.
+>
+> Zuerst die aktuellen Dateien von GitHub herunterladen.
+> `sudo ./install.sh` allein lädt keine neuen Dateien herunter.
+>
+> Beim Installer den vorgeschlagenen Linux-Benutzer nur übernehmen,
+> wenn er zur vorhandenen Installation passt.
+>
+> Abschließend Dienst, Version, Statusseite und Plugins kontrollieren.
+> API-Token niemals öffentlich weitergeben.
+
+
 Diese Anleitung gilt für die mit `install.sh` eingerichtete Raspberry-Pi-Installation unter `/opt/mediahub/ai-node`. **Nicht** einfach `git pull` in diesem Verzeichnis ausführen: Der Installer kopiert die Anwendung ohne `.git` dorthin.
 
 ## 1. Vorhandenen Stand prüfen
