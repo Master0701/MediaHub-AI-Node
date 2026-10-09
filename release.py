@@ -34,6 +34,7 @@ INCLUDED = (
     "REPOSITORY_SETUP.md",
     "SECURITY.md",
     "THIRD_PARTY_LICENSES.md",
+    "install.sh",
     "init_database.py",
     "pyproject.toml",
     "requirements.txt",
@@ -42,7 +43,7 @@ INCLUDED = (
 EXCLUDED_DIRS = {
     ".git", ".github", ".venv", "venv", "env", "__pycache__",
     ".pytest_cache", ".mypy_cache", ".ruff_cache", "build", "dist",
-    "release", "data", "cache", "logs", "runtime", "jobs", "backups",
+    "release", "data", "cache", "logs", "runtime", "jobs", "backups", "backup",
     "models", "node_modules",
 }
 
@@ -197,6 +198,28 @@ def verify_zip(archive_path: Path) -> None:
     if not any(name.endswith("/LICENSE") for name in names):
         raise ReleaseError("LICENSE fehlt im ZIP.")
 
+    required = (
+        "install.sh",
+        "docs/INSTALLATION.md",
+        "docs/UPDATE.md",
+        "docs/UNINSTALL.md",
+        "docs/README.md",
+    )
+    for filename in required:
+        matches = [
+            name for name in names
+            if name.endswith("/" + filename)
+        ]
+        if len(matches) != 1:
+            raise ReleaseError(
+                f"Pflichtdatei fehlt im ZIP: {filename}"
+            )
+        with zipfile.ZipFile(archive_path) as archive:
+            if not archive.read(matches[0]).strip():
+                raise ReleaseError(
+                    f"Pflichtdatei ist leer: {filename}"
+                )
+
     print("ZIP-Archiv ist vollständig und lesbar.")
 
 
@@ -241,7 +264,7 @@ def main() -> int:
                 "Tests ausführen",
             )
             run_check(
-                [sys.executable, "-m", "ruff", "check", "."],
+                [sys.executable, "-m", "ruff", "check", "--extend-exclude", "backup", "."],
                 "Ruff-Codeprüfung",
             )
 

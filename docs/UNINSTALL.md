@@ -1,66 +1,41 @@
-# MediaHub-AI-Node deinstallieren
+# MediaHub-AI-Node vom Raspberry Pi deinstallieren
 
-Der Uninstaller ist Bestandteil des GitHub-Repositories und wird bei der
-Installation zusätzlich systemweit eingerichtet:
+Die Deinstallation betrifft den **Raspberry-Pi-AI-Node**, nicht die separat entwickelte Windows Compute Node.
 
-```text
-/usr/local/sbin/mediahub-ai-node-uninstall
-```
+## Vorher sichern
 
-Dadurch kann er den Projektordner und die virtuelle Python-Umgebung entfernen,
-ohne sich selbst vorher zu löschen.
+Der installierte Uninstaller kann bei der normalen Deinstallation die Daten, Modelle, Backups und `.env` sichern. Bei wichtigen Installationen zusätzlich eine eigene Sicherung anlegen und deren Inhalt prüfen. Besonders wichtig sind `plugins/`, `data/`, `backups/`, `models/` und `.env`.
 
 ## Normale Deinstallation
+
+Der Installer richtet den systemweiten Befehl `mediahub-ai-node-uninstall` ein:
 
 ```bash
 sudo mediahub-ai-node-uninstall
 ```
 
-Der Uninstaller:
+Der Uninstaller stoppt und deaktiviert den Dienst, entfernt die systemd-Dienstdateien und den Programmordner `/opt/mediahub/ai-node`. Ohne `--purge` bietet er eine Sicherung der Daten an. Die virtuelle Umgebung `/opt/mediahub/venv` bleibt standardmäßig bestehen. Der Linux-Benutzer wird nicht gelöscht.
 
-- stoppt und deaktiviert den systemd-Dienst,
-- entfernt Dienstdatei und Drop-ins,
-- führt `systemctl daemon-reload` aus,
-- entfernt `/opt/mediahub/ai-node`,
-- kann Daten, Modelle und Backups vorher sichern,
-- lässt `/opt/mediahub/venv` standardmäßig bestehen,
-- löscht den verwendeten Linux-Benutzer nicht,
-- prüft am Ende Dienst, Projektordner und Port 8765.
+Sicherungen aus dem Uninstaller werden unter einem Ordner nach dem Muster `/opt/mediahub/ai-node-preserved-YYYYMMDD-HHMMSS` abgelegt. Den genauen Pfad aus der Ausgabe notieren.
 
-## Vollständiger Test-Reset
+## Vollständiger Test-Reset – löscht Daten
 
-Für einen neuen automatischen Installationstest:
+**Achtung:** Nur für einen bewusst gewünschten vollständigen Reset verwenden. Der folgende Befehl überspringt Rückfragen und kann Nutzerdaten sowie die virtuelle Python-Umgebung unwiederbringlich entfernen:
 
 ```bash
 sudo mediahub-ai-node-uninstall --purge --remove-venv --yes
 ```
 
-Dabei werden entfernt:
+Dieser Befehl ist **nicht** für ein normales Update erforderlich.
 
-```text
-/etc/systemd/system/mediahub-ai-node.service
-/etc/systemd/system/mediahub-ai-node.service.d/
-/opt/mediahub/ai-node
-/opt/mediahub/venv
-/usr/local/sbin/mediahub-ai-node-uninstall
+## Ergebnis kontrollieren
+
+```bash
+systemctl is-active mediahub-ai-node
+systemctl is-enabled mediahub-ai-node
+ls -ld /opt/mediahub/ai-node
 ```
 
-Der Linux-Benutzer bleibt erhalten.
+Nach einer vollständigen Deinstallation sollten Dienst und Programmordner nicht mehr vorhanden sein. Ein eventuell gesicherter Datenordner und der Linux-Benutzer können weiterhin existieren.
 
-## Daten behalten
-
-Ohne `--purge` fragt der Uninstaller, ob folgende Inhalte gesichert werden
-sollen:
-
-```text
-data/
-backups/
-models/
-.env
-```
-
-Die Sicherung wird unter einem Zeitstempelordner abgelegt:
-
-```text
-/opt/mediahub/ai-node-preserved-YYYYMMDD-HHMMSS
-```
+Siehe auch [Installation](INSTALLATION.md) und [Update](UPDATE.md).

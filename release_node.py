@@ -273,6 +273,18 @@ def normalize_status_path(
     return path
 
 
+def is_local_backup_path(path: str) -> bool:
+    normalized = normalize_status_path(path)
+    return (
+        normalized == "backup"
+        or normalized.startswith("backup/")
+        or (
+            normalized.startswith("tests/")
+            and ".bak" in Path(normalized).name
+        )
+    )
+
+
 def is_allowed_release_path(
     path: str,
 ) -> bool:
@@ -331,6 +343,17 @@ def worktree_entries() -> list[tuple[str, str]]:
     return entries
 
 
+def release_worktree_entries() -> list[tuple[str, str]]:
+    return [
+        (status, path)
+        for status, path in worktree_entries()
+        if not (
+            status == "??"
+            and is_local_backup_path(path)
+        )
+    ]
+
+
 def ensure_no_pre_staged_changes() -> None:
     entries = worktree_entries()
 
@@ -355,7 +378,7 @@ def ensure_no_pre_staged_changes() -> None:
 
 
 def validate_release_worktree() -> None:
-    entries = worktree_entries()
+    entries = release_worktree_entries()
 
     unexpected = [
         f"{status} {path}"
@@ -489,6 +512,8 @@ def run_checks(
         "-m",
         "ruff",
         "check",
+        "--extend-exclude",
+        "backup",
         ".",
     )
 
@@ -718,7 +743,7 @@ def stage_release_changes(
         initial_fingerprints,
     )
 
-    current_entries = worktree_entries()
+    current_entries = release_worktree_entries()
     current_paths = {
         path
         for _status, path in current_entries
@@ -818,23 +843,24 @@ def commit_release_changes(
 
 
 def ensure_clean_before_publish() -> None:
-    status = git(
-        "status",
-        "--porcelain",
-        capture=True,
-    )
+    entries = release_worktree_entries()
 
-    if status:
+    if entries:
+        details = "\n".join(
+            f"{status} {path}"
+            for status, path in entries
+        )
         raise ReleaseError(
-            "Der Arbeitsbaum ist nach dem "
-            "Release-Commit nicht sauber:\n"
-            + status
+            "Der Release-Arbeitsbaum enthält nach dem "
+            "Commit noch Änderungen:\n"
+            + details
         )
 
     print(
-        "[OK] Arbeitsbaum ist nach dem "
-        "Release-Commit sauber."
+        "[OK] Keine offenen Release-Änderungen "
+        "nach dem Commit."
     )
+
 
 
 def ensure_tag_is_free(
@@ -999,7 +1025,7 @@ def main() -> int:
     ensure_no_pre_staged_changes()
     validate_release_worktree()
 
-    initial_entries = worktree_entries()
+    initial_entries = release_worktree_entries()
     initial_paths = {
         path
         for _status, path in initial_entries

@@ -202,3 +202,48 @@ def test_management_requires_token(
         )
 
     assert response.status_code == 401
+
+
+def test_delete_selected_backup_via_api(
+    tmp_path: Path,
+    runtime: tuple[PluginManager, PluginInstaller],
+) -> None:
+    _, installer = runtime
+
+    backup_root = tmp_path / "backups" / "provider.manage-test"
+    selected = backup_root / "backup-one"
+    preserved = backup_root / "backup-two"
+
+    for folder, version in (
+        (selected, "1.0.0"),
+        (preserved, "2.0.0"),
+    ):
+        folder.mkdir(parents=True)
+        (folder / "plugin.json").write_text(
+            json.dumps({
+                "id": "provider.manage-test",
+                "version": version,
+            }),
+            encoding="utf-8",
+        )
+
+    assert installer.backup_root == tmp_path / "backups"
+
+    url = "/plugins/provider.manage-test/backups/backup-one"
+
+    with TestClient(app) as client:
+        unauthorized = client.delete(url)
+        assert unauthorized.status_code == 401
+        assert selected.is_dir()
+
+        response = client.delete(url, headers=AUTH_HEADERS)
+
+    assert response.status_code == 200
+    assert response.json() == {
+        "status": "deleted",
+        "plugin_id": "provider.manage-test",
+        "backup_name": "backup-one",
+    }
+    assert not selected.exists()
+    assert preserved.is_dir()
+    assert (preserved / "plugin.json").is_file()

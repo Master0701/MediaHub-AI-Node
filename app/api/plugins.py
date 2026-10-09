@@ -285,18 +285,33 @@ def remove_plugin_endpoint(
     dependencies=WRITE_DEPENDENCIES,
 )
 def list_plugin_backups_endpoint(plugin_id: str) -> dict[str, Any]:
-    backups = plugin_installer.list_backups(plugin_id)
+    try:
+        backups = plugin_installer.backup_details(plugin_id)
+    except PluginInstallError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
     return {
         "plugin_id": plugin_id.strip().lower(),
         "count": len(backups),
-        "backups": [
-            {
-                "name": path.name,
-                "path": str(path),
-            }
-            for path in backups
-        ],
+        "backups": backups,
     }
+
+
+@router.delete(
+    "/{plugin_id}/backups/{backup_name}",
+    dependencies=WRITE_DEPENDENCIES,
+)
+def delete_plugin_backup_endpoint(plugin_id: str, backup_name: str) -> dict[str, Any]:
+    try:
+        removed = plugin_installer.delete_backup(
+            plugin_id=plugin_id, backup_name=backup_name,
+        )
+        return {
+            "status": "deleted",
+            "plugin_id": plugin_id.strip().lower(),
+            "backup_name": removed.name,
+        }
+    except PluginInstallError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post(

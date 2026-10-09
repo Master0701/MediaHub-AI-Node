@@ -100,30 +100,57 @@ class PluginInstaller:
             ).resolve()
             self._ensure_inside_root(staged_path, self.plugin_root)
 
-            if staged_path.exists():
-                shutil.rmtree(staged_path)
-
-            shutil.copytree(extracted_root, staged_path)
+            previous_path = (
+                self.plugin_root / f".{package.manifest.plugin_id}.before-update"
+            ).resolve()
+            self._ensure_inside_root(previous_path, self.plugin_root)
+            if staged_path.exists() or previous_path.exists():
+                raise PluginInstallError(
+                    "Ein alter Installations-Zwischenstand existiert. Bitte manuell pruefen."
+                )
 
             try:
+                shutil.copytree(extracted_root, staged_path)
                 if replaced_existing:
                     backup_path = self._create_backup(
-                        package.manifest.plugin_id,
-                        install_path,
+                        package.manifest.plugin_id, install_path
                     )
-                    shutil.rmtree(install_path)
-
-                staged_path.replace(install_path)
+                    install_path.replace(previous_path)
+                try:
+                    staged_path.replace(install_path)
+                except Exception as exc:
+                    if previous_path.exists():
+                        try:
+                            previous_path.replace(install_path)
+                        except Exception as recovery_exc:
+                            raise PluginInstallError(
+                                f"Update fehlgeschlagen: {exc}; alte Installation liegt "
+                                f"unter {previous_path}; automatische Ruecksetzung "
+                                f"fehlgeschlagen: {recovery_exc}"
+                            ) from exc
+                    raise PluginInstallError(
+                        f"Installation von '{package.manifest.plugin_id}' "
+                        f"fehlgeschlagen: {exc}"
+                    ) from exc
+            except PluginInstallError:
+                raise
             except Exception as exc:
-                self._restore_after_failure(
-                    install_path=install_path,
-                    staged_path=staged_path,
-                    backup_path=backup_path,
-                )
                 raise PluginInstallError(
                     f"Installation von '{package.manifest.plugin_id}' "
                     f"fehlgeschlagen: {exc}"
                 ) from exc
+            finally:
+                if staged_path.exists():
+                    shutil.rmtree(staged_path)
+
+            if previous_path.exists():
+                try:
+                    shutil.rmtree(previous_path)
+                except OSError as exc:
+                    raise PluginInstallError(
+                        f"Neue Plugin-Version aktiviert, aber alte Installation "
+                        f"konnte nicht entfernt werden: {previous_path}: {exc}"
+                    ) from exc
 
         return PluginInstallResult(
             plugin_id=package.manifest.plugin_id,
@@ -180,36 +207,99 @@ class PluginInstaller:
         normalized_id = plugin_id.strip().lower()
         install_path = (self.plugin_root / normalized_id).resolve()
         resolved_backup = backup_path.resolve()
-
+        plugin_backup_root = (self.backup_root / normalized_id).resolve()
         self._ensure_inside_root(install_path, self.plugin_root)
-        self._ensure_inside_root(resolved_backup, self.backup_root)
+        self._ensure_inside_root(plugin_backup_root, self.backup_root)
+        self._ensure_inside_root(resolved_backup, plugin_backup_root)
+        if resolved_backup == plugin_backup_root or not resolved_backup.is_dir():
+            raise PluginInstallError("Plugin-Backup nicht gefunden oder ungueltig.")
 
-        if not resolved_backup.is_dir():
+        staged_restore = (self.plugin_root / f".{normalized_id}.restoring").resolve()
+        previous_install = (self.plugin_root / f".{normalized_id}.before-rollback").resolve()
+        self._ensure_inside_root(staged_restore, self.plugin_root)
+        self._ensure_inside_root(previous_install, self.plugin_root)
+        if staged_restore.exists() or previous_install.exists():
             raise PluginInstallError(
-                f"Plugin-Backup nicht gefunden: {resolved_backup}"
+                "Ein alter Rollback-Zwischenstand existiert. Bitte manuell pruefen."
             )
-
-        staged_restore = (
-            self.plugin_root / f".{normalized_id}.restoring"
-        ).resolve()
-
-        if staged_restore.exists():
-            shutil.rmtree(staged_restore)
-
-        shutil.copytree(resolved_backup, staged_restore)
-
+        self.plugin_root.mkdir(parents=True, exist_ok=True)
         try:
-            if install_path.exists():
-                shutil.rmtree(install_path)
-            staged_restore.replace(install_path)
+            shutil.copytree(resolved_backup, staged_restore)
         except Exception as exc:
             if staged_restore.exists():
                 shutil.rmtree(staged_restore)
+            raise PluginInstallError(f"Backup konnte nicht vorbereitet werden: {exc}") from exc
+
+        had_install = install_path.exists()
+        moved_previous = False
+        try:
+            if had_install:
+                install_path.replace(previous_install)
+                moved_previous = True
+            staged_restore.replace(install_path)
+        except Exception as exc:
+            if moved_previous:
+                try:
+                    previous_install.replace(install_path)
+                    moved_previous = False
+                except Exception as recovery_exc:
+                    raise PluginInstallError(
+                        f"Rollback fehlgeschlagen: {exc}; alte Installation liegt unter "
+                        f"{previous_install}; automatische Ruecksetzung "
+                        f"fehlgeschlagen: {recovery_exc}"
+                    ) from exc
             raise PluginInstallError(
                 f"Rollback von '{normalized_id}' fehlgeschlagen: {exc}"
             ) from exc
+        finally:
+            if staged_restore.exists():
+                shutil.rmtree(staged_restore)
 
+        if moved_previous:
+            try:
+                shutil.rmtree(previous_install)
+            except OSError as exc:
+                raise PluginInstallError(
+                    f"Plugin wiederhergestellt, aber vorherige Installation konnte nicht "
+                    f"entfernt werden: {previous_install}: {exc}"
+                ) from exc
         return install_path
+
+    def backup_details(self, plugin_id: str) -> list[dict[str, object]]:
+        import json
+        details: list[dict[str, object]] = []
+        for path in self.list_backups(plugin_id):
+            manifest = path / "plugin.json"
+            version = None
+            if manifest.is_file():
+                try:
+                    data = json.loads(manifest.read_text(encoding="utf-8-sig"))
+                    if isinstance(data, dict):
+                        version = data.get("version")
+                except (OSError, ValueError):
+                    pass
+            size_bytes = 0
+            for item in path.rglob("*"):
+                if item.is_file() and not item.is_symlink():
+                    try:
+                        size_bytes += item.stat().st_size
+                    except OSError:
+                        pass
+            details.append({
+                "name": path.name,
+                "path": str(path),
+                "version": str(version) if version is not None else None,
+                "created_at": datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat(),
+                "size_bytes": size_bytes,
+            })
+        return details
+
+    def delete_backup(self, *, plugin_id: str, backup_name: str) -> Path:
+        path = self.resolve_backup(plugin_id=plugin_id, backup_name=backup_name)
+        if not path.is_dir() or path.is_symlink():
+            raise PluginInstallError("Backup nicht gefunden oder ungueltig.")
+        shutil.rmtree(path)
+        return path
 
     def list_backups(self, plugin_id: str) -> tuple[Path, ...]:
         normalized_id = plugin_id.strip().lower()
