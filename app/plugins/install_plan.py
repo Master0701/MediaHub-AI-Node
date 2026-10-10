@@ -5,6 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import StrEnum
 
+from app.plugins.managed_install import MANAGED_PLUGIN_IDS
 from app.plugins.preflight import PluginPreflightResult
 
 
@@ -14,6 +15,7 @@ class InstallActionType(StrEnum):
     PYTHON_PACKAGE = "python_package"
     SYSTEM_TOOL = "system_tool"
     RUNTIME = "runtime"
+    MANAGED_TOOL = "managed_tool"
     AI_PLUGIN = "ai_plugin"
 
 
@@ -69,11 +71,34 @@ class PluginInstallPlanBuilder:
                 )
             )
 
-        for check in preflight.required_tools:
-            if check.available:
-                continue
+        if preflight.plugin_id in MANAGED_PLUGIN_IDS:
+            actions.append(
+                InstallAction(
+                    action_type=InstallActionType.RUNTIME,
+                    name=preflight.plugin_id,
+                    reason=(
+                        "Isolierte Runtime und Standardmodell prüfen "
+                        "und bei Bedarf einrichten."
+                    ),
+                    command_preview="MediaHub-geprüfte Runtime-/Modellbereitstellung",
+                )
+            )
 
+        for check in preflight.required_tools:
+            if check.available or not check.required:
+                continue
             tool_name = check.name
+            if check.source == "mediahub_tools":
+                actions.append(InstallAction(
+                    action_type=InstallActionType.MANAGED_TOOL,
+                    name=tool_name,
+                    reason=(
+                        "Pflichtmodell aus MediaHub_Tools laden, "
+                        "verifizieren und aktivieren."
+                    ),
+                    command_preview="MediaHub_Tools: geprüfter Download mit SHA-256",
+                ))
+                continue
             actions.append(
                 InstallAction(
                     action_type=InstallActionType.SYSTEM_TOOL,

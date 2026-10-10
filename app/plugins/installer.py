@@ -10,12 +10,14 @@ from pathlib import Path
 from zipfile import ZipFile
 
 from app.plugins.errors import PluginError
+from app.plugins.managed_install import MANAGED_PLUGIN_IDS, ensure_managed_assets
 from app.plugins.package_validator import (
     ValidatedPluginPackage,
     validate_plugin_package,
 )
 from app.plugins.preflight import (
     PluginPreflightChecker,
+    PluginPreflightError,
     PluginPreflightResult,
 )
 
@@ -70,9 +72,27 @@ class PluginInstaller:
             expected_sha256=expected_sha256,
         )
 
-        preflight = PluginPreflightChecker(
+        checker = PluginPreflightChecker(
             installed_plugin_ids=installed_plugin_ids or set(),
-        ).check(package)
+        )
+        if package.manifest.plugin_id in MANAGED_PLUGIN_IDS:
+            preflight = checker.inspect(package)
+            blockers = [
+                check.name
+                for check in (
+                    preflight.python_requirements
+                    + preflight.required_tools
+                    + preflight.plugin_dependencies
+                )
+                if check.required and not check.available and check.source != "mediahub_tools"
+            ]
+            if not preflight.license_present or blockers:
+                raise PluginPreflightError(
+                    "Plugin-Voraussetzungen fehlen: " + ", ".join(blockers)
+                    if blockers else "Im Plugin-Paket fehlt eine Lizenzdatei."
+                )
+        else:
+            preflight = checker.check(package)
 
         self.plugin_root.mkdir(parents=True, exist_ok=True)
         self.backup_root.mkdir(parents=True, exist_ok=True)
@@ -111,6 +131,14 @@ class PluginInstaller:
 
             try:
                 shutil.copytree(extracted_root, staged_path)
+                # Complete runtime/model provisioning before replacing any old plugin.
+                # Failure here leaves the previous plugin directory untouched.
+                ensure_managed_assets(
+                    package.manifest.plugin_id,
+                    staged_path,
+                    tool_requirements=package.manifest.tool_requirements,
+                )
+                preflight = checker.check(package)
                 if replaced_existing:
                     backup_path = self._create_backup(
                         package.manifest.plugin_id, install_path

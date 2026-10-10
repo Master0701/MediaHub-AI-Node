@@ -16,8 +16,15 @@ from fastapi import (
 )
 
 from app.plugins.install_plan import (
+    InstallActionType,
     PluginInstallPlanBuilder,
     install_plan_to_dict,
+)
+from app.plugins.installer import PluginInstallError
+from app.plugins.managed_install import (
+    MANAGED_PLUGIN_IDS,
+    ManagedProvisionError,
+    verify_activated_plugin,
 )
 from app.plugins.package_validator import (
     PluginPackageError,
@@ -179,13 +186,23 @@ def confirm_plugin_install_plan_endpoint(
             detail="Die SHA-256-Prüfsumme passt nicht zum gespeicherten Plan.",
         )
 
-    if stored.plan.requires_confirmation and stored.plan.actions:
+    if not stored.plan.license_present:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Der Installationsplan enthält noch nicht ausgeführte "
-                "Voraussetzungen und kann deshalb nicht bestätigt werden."
-            ),
+            detail="Im Plugin-Paket fehlt eine Lizenzdatei.",
+        )
+    pending = stored.plan.actions
+    allowed_managed = (
+        stored.plugin_id in MANAGED_PLUGIN_IDS
+        and all(action.action_type in {
+            InstallActionType.RUNTIME,
+            InstallActionType.MANAGED_TOOL,
+        } for action in pending)
+    )
+    if pending and not allowed_managed:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Nicht automatisch ausführbare Voraussetzungen im Installationsplan.",
         )
 
     consumed = plugin_plan_store.consume(plan_id)
@@ -199,6 +216,12 @@ def confirm_plugin_install_plan_endpoint(
 
         _refresh_plugins()
         record = plugin_manager.registry.get(result.plugin_id)
+        try:
+            verify_activated_plugin(
+                result, record, installer=plugin_installer, refresh=_refresh_plugins,
+            )
+        except ManagedProvisionError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
         return {
             "status": "installed",
@@ -219,6 +242,11 @@ def confirm_plugin_install_plan_endpoint(
                 ),
             },
         }
+    except PluginInstallError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        ) from exc
     finally:
         plugin_plan_store.finalize_consumed(consumed)
 

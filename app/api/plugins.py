@@ -17,6 +17,10 @@ from fastapi import (
 )
 
 from app.plugins.installer import PluginInstallError
+from app.plugins.managed_install import (
+    ManagedProvisionError,
+    verify_activated_plugin,
+)
 from app.plugins.package_validator import PluginPackageError
 from app.plugins.preflight import PluginPreflightError
 from app.plugins.runtime import plugin_installer, plugin_manager
@@ -135,6 +139,12 @@ async def install_plugin_endpoint(
 
         _refresh_plugins()
         record = plugin_manager.registry.get(result.plugin_id)
+        try:
+            verify_activated_plugin(
+                result, record, installer=plugin_installer, refresh=_refresh_plugins,
+            )
+        except ManagedProvisionError as exc:
+            raise HTTPException(status_code=500, detail=str(exc)) from exc
 
         return {
             "status": "installed",

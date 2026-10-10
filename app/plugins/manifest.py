@@ -39,6 +39,17 @@ class PluginDependency:
 
 
 @dataclass(frozen=True, slots=True)
+class PluginToolRequirement:
+    """Ein Systemwerkzeug oder eine deklarierte verwaltete Plugin-Abhängigkeit."""
+
+    tool_id: str
+    source: str = "system"
+    version: str | None = None
+    required: bool = True
+    targets: tuple[str, ...] = ()
+
+
+@dataclass(frozen=True, slots=True)
 class PluginManifest:
     """Validiertes Manifest eines AI-Node-Plugins."""
 
@@ -56,6 +67,7 @@ class PluginManifest:
     capabilities: tuple[str, ...] = ()
     dependencies: tuple[PluginDependency, ...] = ()
     required_tools: tuple[str, ...] = ()
+    tool_requirements: tuple[PluginToolRequirement, ...] = ()
     metadata: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -130,6 +142,10 @@ class PluginManifest:
                 )
             )
 
+        tool_requirements = _parse_tool_requirements(
+            data.get("required_tools", [])
+        )
+
         known_fields = {
             "id",
             "name",
@@ -161,7 +177,10 @@ class PluginManifest:
             permissions=_string_tuple(data.get("permissions", [])),
             capabilities=_string_tuple(data.get("capabilities", [])),
             dependencies=tuple(dependencies),
-            required_tools=_string_tuple(data.get("required_tools", [])),
+            required_tools=tuple(
+                tool.tool_id for tool in tool_requirements
+            ),
+            tool_requirements=tool_requirements,
             metadata={
                 key: value
                 for key, value in data.items()
@@ -191,6 +210,70 @@ class PluginManifest:
             )
 
         return cls.from_dict(data)
+
+
+def _parse_tool_requirements(
+    raw: Any,
+) -> tuple[PluginToolRequirement, ...]:
+    """Erkennt alte String- und neue Objektform ohne Metadatenverlust.
+
+    Die Quelle steuert später den Installationsplan. Fehlende oder
+    ungültige Angaben werden nicht stillschweigend entfernt.
+    """
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise PluginManifestError("'required_tools' muss eine Liste sein.")
+
+    items: list[PluginToolRequirement] = []
+    seen: set[str] = set()
+    for item in raw:
+        if isinstance(item, str):
+            tool_id = item.strip()
+            source = "system"
+            version = None
+            required = True
+            targets: tuple[str, ...] = ()
+        elif isinstance(item, dict):
+            tool_id_value = item.get("id")
+            if not isinstance(tool_id_value, str):
+                raise PluginManifestError("Ein 'required_tools'-Objekt benötigt 'id'.")
+            tool_id = tool_id_value.strip()
+            source_value = item.get("source", "system")
+            if not isinstance(source_value, str) or not source_value.strip():
+                raise PluginManifestError("Ungültige Quelle in 'required_tools'.")
+            source = source_value.strip().lower()
+            version_value = item.get("version")
+            if version_value is not None and not isinstance(version_value, str):
+                raise PluginManifestError("Ungültige Version in 'required_tools'.")
+            version = version_value.strip() if version_value else None
+            required_value = item.get("required", True)
+            if not isinstance(required_value, bool):
+                raise PluginManifestError("'required' muss boolesch sein.")
+            required = required_value
+            target_value = item.get("targets", [])
+            if not isinstance(target_value, list) or any(
+                not isinstance(target, str) or not target.strip()
+                for target in target_value
+            ):
+                raise PluginManifestError("Ungültige 'targets' in 'required_tools'.")
+            targets = tuple(target.strip() for target in target_value)
+        else:
+            raise PluginManifestError("Ungültiger Eintrag in 'required_tools'.")
+
+        if not PLUGIN_ID_PATTERN.fullmatch(tool_id):
+            raise PluginManifestError(f"Ungültige Werkzeug-ID: {tool_id!r}")
+        if tool_id in seen:
+            raise PluginManifestError(f"Doppeltes Pflichtwerkzeug: {tool_id}")
+        seen.add(tool_id)
+        items.append(PluginToolRequirement(
+            tool_id=tool_id,
+            source=source,
+            version=version,
+            required=required,
+            targets=targets,
+        ))
+    return tuple(items)
 
 
 def _string_tuple(value: Any) -> tuple[str, ...]:

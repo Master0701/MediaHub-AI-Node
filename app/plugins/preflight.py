@@ -11,6 +11,8 @@ from pathlib import Path
 from zipfile import ZipFile
 
 from app.plugins.errors import PluginError
+from app.plugins.managed_install import MANAGED_PLUGIN_IDS, inspect_managed_tool
+from app.plugins.manifest import PluginToolRequirement
 from app.plugins.package_validator import ValidatedPluginPackage
 
 LICENSE_FILENAMES = {
@@ -39,6 +41,7 @@ class DependencyCheck:
     available: bool
     installed_version: str | None = None
     details: str = ""
+    source: str = "system"
 
 
 @dataclass(frozen=True, slots=True)
@@ -96,14 +99,24 @@ class PluginPreflightChecker:
                 )
             )
 
-        python_checks = tuple(
-            self._check_python_requirement(requirement)
-            for requirement in requirements
+        # Managed, isolated Python runtimes do not install into the Node venv.
+        # Their readiness is checked and provisioned by the approved installer.
+        runtime_spec = package.manifest.metadata.get("runtime")
+        managed_isolated = (
+            package.manifest.plugin_id in MANAGED_PLUGIN_IDS
+            and isinstance(runtime_spec, dict)
+            and runtime_spec.get("isolated") is True
+        )
+        python_checks = (
+            () if managed_isolated else tuple(
+                self._check_python_requirement(requirement)
+                for requirement in requirements
+            )
         )
 
         tool_checks = tuple(
-            self._check_tool(tool)
-            for tool in package.manifest.required_tools
+            self._check_tool(tool, package.manifest.plugin_id)
+            for tool in package.manifest.tool_requirements
         )
 
         plugin_checks = tuple(
@@ -171,17 +184,25 @@ class PluginPreflightChecker:
         return result
 
     @staticmethod
-    def _check_tool(tool: str) -> DependencyCheck:
-        available = shutil.which(tool) is not None
+    def _check_tool(tool: PluginToolRequirement, plugin_id: str) -> DependencyCheck:
+        if tool.source == "mediahub_tools":
+            available = inspect_managed_tool(plugin_id=plugin_id, tool_id=tool.tool_id)
+            details = (
+                "Verwaltetes MediaHub_Tools-Asset gefunden und geprüft."
+                if available else "Verwaltetes MediaHub_Tools-Asset fehlt oder ist unvollständig."
+            )
+        elif tool.source == "system":
+            available = shutil.which(tool.tool_id) is not None
+            details = "Tool im PATH gefunden." if available else "Tool nicht im PATH gefunden."
+        else:
+            available = False
+            details = f"Nicht unterstützte Werkzeugquelle: {tool.source}"
         return DependencyCheck(
-            name=tool,
-            required=True,
+            name=tool.tool_id,
+            required=tool.required,
             available=available,
-            details=(
-                "Tool gefunden."
-                if available
-                else "Tool nicht im PATH gefunden."
-            ),
+            details=details,
+            source=tool.source,
         )
 
     @staticmethod
