@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.8.25
+
+- Plugin-Installationsverwaltung für GLiNER und SmolVLM2 verbessert.
+- Strukturierte Tool- und Modellabhängigkeiten werden vollständig erkannt.
+- Fehlende Runtimes und Modelle werden während der bestätigten Installation eingerichtet.
+- Vorhandene Runtimes und Modelle werden wiederverwendet.
+- Installation prüft Betriebsbereitschaft vor der Erfolgsmeldung.
+- Rollback bei fehlgeschlagener Plugin-Aktivierung ergänzt.
+- Regressionstests für Installation, Modellprüfung und Rollback ergänzt.
+- Raspberry-Pi-Online-Installer und Windows-Speech-Runtime unverändert.
+
 ## v0.8.22
 
 - Raspberry-Pi-AI-Node um Heartbeat-basierte MediaHub-Aktivitätserkennung erweitert.
