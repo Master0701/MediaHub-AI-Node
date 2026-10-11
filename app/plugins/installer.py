@@ -317,7 +317,17 @@ class PluginInstaller:
                 "name": path.name,
                 "path": str(path),
                 "version": str(version) if version is not None else None,
-                "created_at": datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat(),
+                "created_at": (
+                    datetime.strptime(path.name, "%Y%m%dT%H%M%S%fZ")
+                    .replace(tzinfo=UTC)
+                    .isoformat()
+                    if len(path.name) == 22
+                    and path.name.endswith("Z")
+                    and path.name[:8].isdigit()
+                    and path.name[8] == "T"
+                    and path.name[9:-1].isdigit()
+                    else datetime.fromtimestamp(path.stat().st_mtime, UTC).isoformat()
+                ),
                 "size_bytes": size_bytes,
             })
         return details
@@ -328,6 +338,20 @@ class PluginInstaller:
             raise PluginInstallError("Backup nicht gefunden oder ungueltig.")
         shutil.rmtree(path)
         return path
+
+    def list_backup_plugin_ids(self) -> tuple[str, ...]:
+        """Ermittelt Plugin-IDs mit vorhandenen Sicherungen."""
+        if not self.backup_root.is_dir():
+            return ()
+
+        plugin_ids = []
+        for folder in self.backup_root.iterdir():
+            if folder.is_symlink() or not folder.is_dir():
+                continue
+            if self.list_backups(folder.name):
+                plugin_ids.append(folder.name)
+
+        return tuple(sorted(plugin_ids))
 
     def list_backups(self, plugin_id: str) -> tuple[Path, ...]:
         normalized_id = plugin_id.strip().lower()

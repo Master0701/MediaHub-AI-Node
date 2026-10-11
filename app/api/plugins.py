@@ -64,6 +64,19 @@ def list_plugins_endpoint() -> dict[str, Any]:
     }
 
 
+@router.get(
+    "/backups/overview",
+    dependencies=WRITE_DEPENDENCIES,
+)
+def list_backup_overview_endpoint() -> dict[str, Any]:
+    """Listet Plugins mit vorhandenen Backups auf."""
+    plugin_ids = plugin_installer.list_backup_plugin_ids()
+    return {
+        "count": len(plugin_ids),
+        "plugin_ids": list(plugin_ids),
+    }
+
+
 @router.get("/{plugin_id}")
 def get_plugin_endpoint(plugin_id: str) -> dict[str, Any]:
     record = plugin_manager.registry.get(plugin_id)
