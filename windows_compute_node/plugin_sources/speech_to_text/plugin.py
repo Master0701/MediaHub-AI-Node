@@ -208,7 +208,10 @@ def create_handler(
         runtime_status = inspect_runtime()
 
         if not runtime_status["ready"]:
-            runtime_status = install_dependencies()
+            raise RuntimeError(
+                "Speech-Runtime ist nicht bereit. Bitte Plugin-Installation "
+                "mit Python-Abhaengigkeiten abschliessen."
+            )
 
         backend = str(
             selected.get(
@@ -221,7 +224,11 @@ def create_handler(
             cuda_status = inspect_cuda_runtime()
 
             if not cuda_status["ready"]:
-                cuda_status = install_cuda_dependencies()
+                raise RuntimeError(
+                    "Speech-CUDA-Runtime ist nicht bereit. "
+                    "CUDA-Abhaengigkeiten muessen zuerst ueber den "
+                    "bestaetigten Installationsablauf eingerichtet werden."
+                )
 
         runtime_python = venv_python()
 

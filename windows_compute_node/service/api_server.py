@@ -5,7 +5,11 @@ from __future__ import annotations
 import hashlib
 import html as html_lib
 import json
-import tempfile
+import re
+import shutil
+import threading
+import time
+import uuid
 from http.server import (
     BaseHTTPRequestHandler,
     ThreadingHTTPServer,
@@ -61,40 +65,20 @@ class ComputeNodeAPI:
     ) -> None:
         self.runtime_dir = Path(runtime_dir)
 
-        self.input_cleanup = JobInputCleanup(
-            self.runtime_dir
-        )
-        self.orphan_inputs_removed = (
-            self.input_cleanup.cleanup_orphans()
-        )
+        self.input_cleanup = JobInputCleanup(self.runtime_dir)
+        self.orphan_inputs_removed = self.input_cleanup.cleanup_orphans()
 
-        self.identity = NodeIdentity(
-            self.runtime_dir
-            / "node_identity.json"
-        ).load_or_create()
+        self.identity = NodeIdentity(self.runtime_dir / "node_identity.json").load_or_create()
 
-        self.settings = NodeSettings(
-            self.runtime_dir
-            / "settings.json"
-        ).load()
+        self.settings = NodeSettings(self.runtime_dir / "settings.json").load()
 
-        self.token_store = NodeApiToken(
-            self.runtime_dir
-            / "security"
-            / "api_token.json"
-        )
+        self.token_store = NodeApiToken(self.runtime_dir / "security" / "api_token.json")
 
-        self.api_token = (
-            self.token_store.load_or_create()
-        )
+        self.api_token = self.token_store.load_or_create()
 
-        self.pairing = PairingManager(
-            lifetime_seconds=600
-        )
+        self.pairing = PairingManager(lifetime_seconds=600)
 
-        self.pairing_code = (
-            self.pairing.create_code()
-        )
+        self.pairing_code = self.pairing.create_code()
 
         self.jobs = JobQueue()
         self.runtime_status = ComputeNodeRuntimeStatus()
@@ -106,40 +90,26 @@ class ComputeNodeAPI:
             runtime_dir=self.runtime_dir,
         )
 
-        self.plugin_installer = (
-            ComputePluginInstaller(
-                plugin_root=(
-                    self.runtime_dir
-                    / "plugins"
-                ),
-            )
+        self._install_plans = {}
+        self._install_plan_lock = threading.RLock()
+        self._install_plan_dir = self.runtime_dir / "plugin_install_plans"
+
+        self.plugin_installer = ComputePluginInstaller(
+            plugin_root=(self.runtime_dir / "plugins"),
         )
 
-        self.plugin_loader = (
-            ComputePluginLoader(
-                plugin_root=(
-                    self.runtime_dir
-                    / "plugins"
-                ),
-                workers=self.workers,
-                capabilities_provider=(
-                    get_capabilities
-                ),
-            )
+        self.plugin_loader = ComputePluginLoader(
+            plugin_root=(self.runtime_dir / "plugins"),
+            workers=self.workers,
+            capabilities_provider=(get_capabilities),
         )
 
-        self.plugin_load_results = (
-            self.plugin_loader.load_all()
-        )
+        self.plugin_load_results = self.plugin_loader.load_all()
 
         self.activity = NodeActivityController(
             idle_timeout_seconds=900.0,
-            sleep_callback=(
-                self.plugin_loader.sleep_all
-            ),
-            wake_callback=(
-                self.plugin_loader.wake_all
-            ),
+            sleep_callback=(self.plugin_loader.sleep_all),
+            wake_callback=(self.plugin_loader.wake_all),
         )
 
         self.dispatcher.activity = self.activity
@@ -157,29 +127,16 @@ class ComputeNodeAPI:
             runtime_dir=self.runtime_dir,
         )
 
-        self.plugin_loader = (
-            ComputePluginLoader(
-                plugin_root=(
-                    self.runtime_dir
-                    / "plugins"
-                ),
-                workers=self.workers,
-                capabilities_provider=(
-                    get_capabilities
-                ),
-            )
+        self.plugin_loader = ComputePluginLoader(
+            plugin_root=(self.runtime_dir / "plugins"),
+            workers=self.workers,
+            capabilities_provider=(get_capabilities),
         )
 
-        self.plugin_load_results = (
-            self.plugin_loader.load_all()
-        )
+        self.plugin_load_results = self.plugin_loader.load_all()
 
-        self.activity.sleep_callback = (
-            self.plugin_loader.sleep_all
-        )
-        self.activity.wake_callback = (
-            self.plugin_loader.wake_all
-        )
+        self.activity.sleep_callback = self.plugin_loader.sleep_all
+        self.activity.wake_callback = self.plugin_loader.wake_all
 
         self.dispatcher.activity = self.activity
 
@@ -189,9 +146,7 @@ class ComputeNodeAPI:
         self,
         plugin_id: str,
     ) -> dict[str, Any]:
-        result = self.plugin_installer.uninstall(
-            plugin_id
-        )
+        result = self.plugin_installer.uninstall(plugin_id)
 
         loaded = self.reload_plugins()
 
@@ -202,6 +157,102 @@ class ComputeNodeAPI:
             "workers": self.workers.list_workers(),
         }
 
+    def _cleanup_install_plans(self) -> None:
+        now = time.monotonic()
+        for plan_id, entry in list(self._install_plans.items()):
+            if entry["expires"] <= now:
+                self._install_plans.pop(plan_id, None)
+                shutil.rmtree(entry["directory"], ignore_errors=True)
+
+    def create_install_plan(
+        self, filename: str, body: bytes, sha256: str, replace: bool
+    ) -> dict[str, Any]:
+        expected = sha256.strip().lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", expected):
+            raise PluginInstallError("Ungueltige SHA-256-Pruefsumme.")
+        if hashlib.sha256(body).hexdigest() != expected:
+            raise PluginInstallError("SHA-256-Pruefsumme stimmt nicht ueberein.")
+        with self._install_plan_lock:
+            self._cleanup_install_plans()
+            plan_id = uuid.uuid4().hex
+            directory = self._install_plan_dir / plan_id
+            directory.mkdir(parents=True, exist_ok=False)
+            package = directory / filename
+            try:
+                package.write_bytes(body)
+                manifest = self.plugin_installer.inspect_package(package)
+                plugin_id = str(manifest["id"])
+                if (self.plugin_installer.plugin_root / plugin_id).exists() and not replace:
+                    raise PluginInstallError(
+                        "Plugin ist bereits installiert; Ersetzen muss bestaetigt werden."
+                    )
+                runtime = manifest.get("runtime") or {}
+                if not isinstance(runtime, dict):
+                    raise PluginInstallError("Ungueltige Runtime-Deklaration.")
+                python_packages = runtime.get("dependencies", [])
+                if not isinstance(python_packages, list) or any(
+                    not isinstance(x, str) for x in python_packages
+                ):
+                    raise PluginInstallError("Ungueltige Python-Abhaengigkeiten.")
+                dependencies = manifest.get("dependencies", [])
+                if not isinstance(dependencies, list):
+                    raise PluginInstallError("Ungueltige Plugin-Abhaengigkeiten.")
+                response = {
+                    "status": "plan_created",
+                    "plan_id": plan_id,
+                    "package": {
+                        "plugin_id": plugin_id,
+                        "name": str(manifest.get("name") or plugin_id),
+                        "version": str(manifest.get("version") or ""),
+                        "sha256": expected,
+                    },
+                    "plan": {
+                        "replace": replace,
+                        "python_packages": python_packages,
+                        "plugin_dependencies": [
+                            x
+                            for x in dependencies
+                            if isinstance(x, dict)
+                            and (not x.get("targets") or "windows_compute" in x.get("targets", []))
+                        ],
+                        "runtime_isolated": runtime.get("isolated") is True,
+                    },
+                }
+                self._install_plans[plan_id] = {
+                    "directory": directory,
+                    "package": package,
+                    "sha256": expected,
+                    "replace": replace,
+                    "expires": time.monotonic() + 900,
+                }
+                return response
+            except Exception:
+                shutil.rmtree(directory, ignore_errors=True)
+                raise
+
+    def cancel_install_plan(self, plan_id: str) -> dict[str, Any]:
+        with self._install_plan_lock:
+            entry = self._install_plans.pop(plan_id, None)
+            if entry:
+                shutil.rmtree(entry["directory"], ignore_errors=True)
+        return {"cancelled": True}
+
+    def confirm_install_plan(self, plan_id: str, sha256: str) -> dict[str, Any]:
+        with self._install_plan_lock:
+            self._cleanup_install_plans()
+            entry = self._install_plans.get(plan_id)
+            if entry is None:
+                raise PluginInstallError("Installationsplan nicht vorhanden oder abgelaufen.")
+            if sha256.strip().lower() != entry["sha256"]:
+                raise PluginInstallError("SHA-256 stimmt nicht mit dem Installationsplan ueberein.")
+            self._install_plans.pop(plan_id)
+            try:
+                return self.install_plugin_package(
+                    entry["package"], expected_sha256=entry["sha256"], replace=entry["replace"]
+                )
+            finally:
+                shutil.rmtree(entry["directory"], ignore_errors=True)
+
     def install_plugin_package(
         self,
         package_path: Path,
@@ -209,30 +260,17 @@ class ComputeNodeAPI:
         expected_sha256: str,
         replace: bool = False,
     ) -> dict[str, Any]:
-        package_path = Path(
-            package_path
-        )
+        package_path = Path(package_path)
 
-        expected = (
-            str(expected_sha256)
-            .strip()
-            .lower()
-        )
+        expected = str(expected_sha256).strip().lower()
 
         if not expected:
-            raise PluginInstallError(
-                "SHA-256-Prüfsumme fehlt."
-            )
+            raise PluginInstallError("SHA-256-Prüfsumme fehlt.")
 
-        digest = hashlib.sha256(
-            package_path.read_bytes()
-        ).hexdigest()
+        digest = hashlib.sha256(package_path.read_bytes()).hexdigest()
 
         if digest != expected:
-            raise PluginInstallError(
-                "SHA-256-Prüfsumme stimmt "
-                "nicht mit dem Paket überein."
-            )
+            raise PluginInstallError("SHA-256-Prüfsumme stimmt nicht mit dem Paket überein.")
 
         result = self.plugin_installer.install(
             package_path,
@@ -241,23 +279,14 @@ class ComputeNodeAPI:
 
         loaded = self.reload_plugins()
 
-        plugin_id = str(
-            result.get("plugin_id")
-            or result.get("id")
-            or ""
-        )
+        plugin_id = str(result.get("plugin_id") or result.get("id") or "")
 
         runtime_result = next(
             (
                 item
                 for item in loaded
                 if isinstance(item, dict)
-                and str(
-                    item.get("plugin_id")
-                    or item.get("id")
-                    or ""
-                )
-                == plugin_id
+                and str(item.get("plugin_id") or item.get("id") or "") == plugin_id
             ),
             None,
         )
@@ -282,9 +311,7 @@ class ComputeNodeAPI:
     ) -> dict[str, Any]:
         return {
             "node_id": self.identity["node_id"],
-            "node_name": self.settings[
-                "node_name"
-            ],
+            "node_name": self.settings["node_name"],
             "node_type": "windows_compute",
         }
 
@@ -334,22 +361,13 @@ class RequestHandler(
 
         prefix = "Bearer "
 
-        if not authorization.startswith(
-            prefix
-        ):
+        if not authorization.startswith(prefix):
             return None
 
-        return authorization[
-            len(prefix):
-        ].strip()
+        return authorization[len(prefix) :].strip()
 
     def _authorized(self) -> bool:
-        connection = (
-            self.api.settings.get(
-                "connection"
-            )
-            or {}
-        )
+        connection = self.api.settings.get("connection") or {}
 
         if not connection.get(
             "require_authentication",
@@ -357,9 +375,7 @@ class RequestHandler(
         ):
             return True
 
-        return self.api.token_store.validate(
-            self._bearer_token()
-        )
+        return self.api.token_store.validate(self._bearer_token())
 
     def _require_auth(self) -> bool:
         if self._authorized():
@@ -370,10 +386,7 @@ class RequestHandler(
             401,
             {
                 "error": "unauthorized",
-                "detail": (
-                    "Gueltiges Compute-Node-"
-                    "API-Token erforderlich."
-                ),
+                "detail": ("Gueltiges Compute-Node-API-Token erforderlich."),
             },
         )
 
@@ -398,9 +411,7 @@ class RequestHandler(
         raw = self.rfile.read(length)
 
         try:
-            data = json.loads(
-                raw.decode("utf-8")
-            )
+            data = json.loads(raw.decode("utf-8"))
         except (
             UnicodeDecodeError,
             json.JSONDecodeError,
@@ -428,31 +439,20 @@ class RequestHandler(
             length = 0
 
         if length <= 0:
-            raise ValueError(
-                "Leerer Request-Body."
-            )
+            raise ValueError("Leerer Request-Body.")
 
         if length > max_bytes:
-            raise ValueError(
-                "Plugin-Paket ist größer "
-                "als 512 MiB."
-            )
+            raise ValueError("Plugin-Paket ist größer als 512 MiB.")
 
-        body = self.rfile.read(
-            length
-        )
+        body = self.rfile.read(length)
 
         if len(body) != length:
-            raise ValueError(
-                "Plugin-Paket wurde nicht "
-                "vollständig übertragen."
-            )
+            raise ValueError("Plugin-Paket wurde nicht vollständig übertragen.")
 
         return body
 
     def do_POST(self) -> None:
         path = self.path.split(
-
             "?",
             1,
         )[0].rstrip("/")
@@ -467,9 +467,7 @@ class RequestHandler(
                 200,
                 {
                     "ok": True,
-                    "activity": (
-                        self.api.activity.status()
-                    ),
+                    "activity": (self.api.activity.status()),
                 },
             )
             return
@@ -488,20 +486,12 @@ class RequestHandler(
             if not plugin_id:
                 self._send_json(
                     400,
-                    {
-                        "error": (
-                            "X-Plugin-ID fehlt."
-                        )
-                    },
+                    {"error": ("X-Plugin-ID fehlt.")},
                 )
                 return
 
             try:
-                result = (
-                    self.api.uninstall_plugin(
-                        plugin_id
-                    )
-                )
+                result = self.api.uninstall_plugin(plugin_id)
             except PluginInstallError as exc:
                 self._send_json(
                     400,
@@ -521,7 +511,42 @@ class RequestHandler(
             )
             return
 
+        if path.startswith("/plugins/plan/") and path.endswith("/confirm"):
+            if not self._require_auth():
+                return
+            plan_id = path[len("/plugins/plan/") : -len("/confirm")].strip("/")
+            if not re.fullmatch(r"[0-9a-f]{32}", plan_id):
+                self._send_json(400, {"error": "invalid_plan_id"})
+                return
+            try:
+                result = self.api.confirm_install_plan(
+                    plan_id, self.headers.get("X-Plugin-SHA256", "")
+                )
+            except PluginInstallError as error:
+                self._send_json(400, {"error": "plan_confirmation_failed", "detail": str(error)})
+                return
+            except OSError as error:
+                self._send_json(500, {"error": "plugin_io_error", "detail": str(error)})
+                return
+            self._send_json(201, result)
+            return
+
         if path == "/plugins/install":
+            if not self._require_auth():
+                return
+            self._send_json(
+                409,
+                {
+                    "error": "install_plan_required",
+                    "detail": (
+                        "Direkte Installation deaktiviert. "
+                        "/plugins/plan und /confirm verwenden."
+                    ),
+                },
+            )
+            return
+
+        if path == "/plugins/plan":
             if not self._require_auth():
                 return
 
@@ -539,12 +564,16 @@ class RequestHandler(
                 )
             ).strip()
 
-            replace_value = str(
-                self.headers.get(
-                    "X-Plugin-Replace",
-                    "false",
+            replace_value = (
+                str(
+                    self.headers.get(
+                        "X-Plugin-Replace",
+                        "false",
+                    )
                 )
-            ).strip().lower()
+                .strip()
+                .lower()
+            )
 
             replace = replace_value in {
                 "1",
@@ -553,27 +582,18 @@ class RequestHandler(
                 "on",
             }
 
-            safe_name = Path(
-                filename
-            ).name
+            safe_name = Path(filename).name
 
             if (
                 not safe_name
                 or safe_name != filename
-                or not safe_name.lower().endswith(
-                    ".mhaiplugin"
-                )
+                or not safe_name.lower().endswith(".mhaiplugin")
             ):
                 self._send_json(
                     400,
                     {
-                        "error": (
-                            "invalid_plugin_filename"
-                        ),
-                        "detail": (
-                            "Ungültiger "
-                            ".mhaiplugin-Dateiname."
-                        ),
+                        "error": ("invalid_plugin_filename"),
+                        "detail": ("Ungültiger .mhaiplugin-Dateiname."),
                     },
                 )
                 return
@@ -582,12 +602,8 @@ class RequestHandler(
                 self._send_json(
                     400,
                     {
-                        "error": (
-                            "missing_sha256"
-                        ),
-                        "detail": (
-                            "X-Plugin-SHA256 fehlt."
-                        ),
+                        "error": ("missing_sha256"),
+                        "detail": ("X-Plugin-SHA256 fehlt."),
                     },
                 )
                 return
@@ -598,47 +614,20 @@ class RequestHandler(
                 self._send_json(
                     400,
                     {
-                        "error": (
-                            "invalid_plugin_body"
-                        ),
+                        "error": ("invalid_plugin_body"),
                         "detail": str(error),
                     },
                 )
                 return
 
             try:
-                with tempfile.TemporaryDirectory(
-                    prefix=(
-                        "mediahub_compute_upload_"
-                    )
-                ) as temp_name:
-                    package = (
-                        Path(temp_name)
-                        / safe_name
-                    )
-
-                    package.write_bytes(
-                        body
-                    )
-
-                    result = (
-                        self.api
-                        .install_plugin_package(
-                            package,
-                            expected_sha256=(
-                                expected_sha256
-                            ),
-                            replace=replace,
-                        )
-                    )
+                result = self.api.create_install_plan(safe_name, body, expected_sha256, replace)
 
             except PluginInstallError as error:
                 self._send_json(
                     400,
                     {
-                        "error": (
-                            "plugin_install_failed"
-                        ),
+                        "error": ("plugin_install_failed"),
                         "detail": str(error),
                     },
                 )
@@ -648,16 +637,14 @@ class RequestHandler(
                 self._send_json(
                     500,
                     {
-                        "error": (
-                            "plugin_io_error"
-                        ),
+                        "error": ("plugin_io_error"),
                         "detail": str(error),
                     },
                 )
                 return
 
             self._send_json(
-                201,
+                200,
                 result,
             )
             return
@@ -668,11 +655,7 @@ class RequestHandler(
 
             self._send_json(
                 200,
-                {
-                    "plugins": (
-                        self.api.plugin_load_results
-                    )
-                },
+                {"plugins": (self.api.plugin_load_results)},
             )
             return
 
@@ -682,25 +665,15 @@ class RequestHandler(
 
             self._send_json(
                 200,
-                {
-                    "workers": (
-                        self.api.workers.list_workers()
-                    )
-                },
+                {"workers": (self.api.workers.list_workers())},
             )
             return
 
-        if (
-            path.startswith("/jobs/")
-            and path.endswith("/input")
-        ):
+        if path.startswith("/jobs/") and path.endswith("/input"):
             if not self._require_auth():
                 return
 
-            job_id = path[
-                len("/jobs/"):
-                -len("/input")
-            ].strip("/")
+            job_id = path[len("/jobs/") : -len("/input")].strip("/")
 
             if not job_id:
                 self._send_json(
@@ -711,9 +684,7 @@ class RequestHandler(
                 )
                 return
 
-            job = self.api.jobs.get(
-                job_id
-            )
+            job = self.api.jobs.get(job_id)
 
             if job is None:
                 self._send_json(
@@ -742,14 +713,9 @@ class RequestHandler(
                 )
             ).strip()
 
-            safe_name = Path(
-                filename
-            ).name
+            safe_name = Path(filename).name
 
-            if (
-                not safe_name
-                or safe_name != filename
-            ):
+            if not safe_name or safe_name != filename:
                 self._send_json(
                     400,
                     {
@@ -777,25 +743,16 @@ class RequestHandler(
                 )
                 return
 
-            upload_dir = (
-                self.api.runtime_dir
-                / "job_inputs"
-                / job_id
-            )
+            upload_dir = self.api.runtime_dir / "job_inputs" / job_id
 
             upload_dir.mkdir(
                 parents=True,
                 exist_ok=True,
             )
 
-            target = (
-                upload_dir
-                / safe_name
-            )
+            target = upload_dir / safe_name
 
-            temporary = target.with_suffix(
-                target.suffix + ".part"
-            )
+            temporary = target.with_suffix(target.suffix + ".part")
 
             if temporary.exists():
                 temporary.unlink()
@@ -803,9 +760,7 @@ class RequestHandler(
             remaining = content_length
 
             try:
-                with temporary.open(
-                    "wb"
-                ) as handle:
+                with temporary.open("wb") as handle:
                     while remaining > 0:
                         chunk = self.rfile.read(
                             min(
@@ -815,34 +770,22 @@ class RequestHandler(
                         )
 
                         if not chunk:
-                            raise ValueError(
-                                "Eingabedatei wurde nicht vollständig übertragen."
-                            )
+                            raise ValueError("Eingabedatei wurde nicht vollständig übertragen.")
 
-                        handle.write(
-                            chunk
-                        )
-                        remaining -= len(
-                            chunk
-                        )
+                        handle.write(chunk)
+                        remaining -= len(chunk)
 
-                temporary.replace(
-                    target
-                )
+                temporary.replace(target)
 
-                updated = (
-                    self.api.jobs.update_payload(
-                        job_id,
-                        {
-                            "input": str(
-                                target
-                            ),
-                            "input_info": {
-                                "filename": safe_name,
-                                "size": content_length,
-                            },
+                updated = self.api.jobs.update_payload(
+                    job_id,
+                    {
+                        "input": str(target),
+                        "input_info": {
+                            "filename": safe_name,
+                            "size": content_length,
                         },
-                    )
+                    },
                 )
 
             except Exception as error:
@@ -865,25 +808,16 @@ class RequestHandler(
                 200,
                 {
                     "job": updated,
-                    "input": (
-                        updated.get("payload", {})
-                        .get("input", {})
-                    ),
+                    "input": (updated.get("payload", {}).get("input", {})),
                 },
             )
             return
 
-        if (
-            path.startswith("/jobs/")
-            and path.endswith("/execute")
-        ):
+        if path.startswith("/jobs/") and path.endswith("/execute"):
             if not self._require_auth():
                 return
 
-            job_id = path[
-                len("/jobs/"):
-                -len("/execute")
-            ].strip("/")
+            job_id = path[len("/jobs/") : -len("/execute")].strip("/")
 
             if not job_id:
                 self._send_json(
@@ -895,11 +829,7 @@ class RequestHandler(
                 return
 
             try:
-                job = (
-                    self.api.dispatcher.execute(
-                        job_id
-                    )
-                )
+                job = self.api.dispatcher.execute(job_id)
             except KeyError:
                 self._send_json(
                     404,
@@ -922,20 +852,14 @@ class RequestHandler(
 
             payload = self._read_json()
 
-            job_type = str(
-                payload.get("job_type")
-                or ""
-            ).strip()
+            job_type = str(payload.get("job_type") or "").strip()
 
             if not job_type:
                 self._send_json(
                     400,
                     {
                         "error": "invalid_job",
-                        "detail": (
-                            "job_type ist "
-                            "erforderlich."
-                        ),
+                        "detail": ("job_type ist erforderlich."),
                     },
                 )
                 return
@@ -953,9 +877,7 @@ class RequestHandler(
                 execution=(
                     payload.get("execution")
                     if isinstance(
-                        payload.get(
-                            "execution"
-                        ),
+                        payload.get("execution"),
                         dict,
                     )
                     else {}
@@ -971,22 +893,14 @@ class RequestHandler(
         if path == "/pair":
             payload = self._read_json()
 
-            code = str(
-                payload.get("code")
-                or ""
-            ).strip()
+            code = str(payload.get("code") or "").strip()
 
-            if not self.api.pairing.validate(
-                code
-            ):
+            if not self.api.pairing.validate(code):
                 self._send_json(
                     403,
                     {
                         "error": "pairing_failed",
-                        "detail": (
-                            "Pairing-Code ist "
-                            "ungueltig oder abgelaufen."
-                        ),
+                        "detail": ("Pairing-Code ist ungueltig oder abgelaufen."),
                     },
                 )
                 return
@@ -995,22 +909,10 @@ class RequestHandler(
                 200,
                 {
                     "status": "paired",
-                    "node_id": (
-                        self.api.identity[
-                            "node_id"
-                        ]
-                    ),
-                    "node_name": (
-                        self.api.settings[
-                            "node_name"
-                        ]
-                    ),
-                    "node_type": (
-                        "windows_compute"
-                    ),
-                    "api_token": (
-                        self.api.api_token
-                    ),
+                    "node_id": (self.api.identity["node_id"]),
+                    "node_name": (self.api.settings["node_name"]),
+                    "node_type": ("windows_compute"),
+                    "api_token": (self.api.api_token),
                 },
             )
             return
@@ -1029,22 +931,26 @@ class RequestHandler(
             1,
         )[0].rstrip("/")
 
+        if path.startswith("/plugins/plan/"):
+            if not self._require_auth():
+                return
+            plan_id = path[len("/plugins/plan/") :]
+            if not re.fullmatch(r"[0-9a-f]{32}", plan_id):
+                self._send_json(400, {"error": "invalid_plan_id"})
+                return
+            self._send_json(200, self.api.cancel_install_plan(plan_id))
+            return
+
         if path.startswith("/jobs/"):
             if not self._require_auth():
                 return
 
-            job_id = path[
-                len("/jobs/"):
-            ].strip()
+            job_id = path[len("/jobs/") :].strip()
 
-            job = self.api.jobs.cancel(
-                job_id
-            )
+            job = self.api.jobs.cancel(job_id)
 
             if job is not None:
-                self.api.dispatcher._cleanup_input(
-                    job_id
-                )
+                self.api.dispatcher._cleanup_input(job_id)
 
             if job is None:
                 self._send_json(
@@ -1093,19 +999,13 @@ class RequestHandler(
             return
 
         if path == "/pair/status":
-            status = (
-                self.api.pairing.status()
-            )
+            status = self.api.pairing.status()
 
             self._send_json(
                 200,
                 {
                     "pairing": status,
-                    "node_id": (
-                        self.api.identity[
-                            "node_id"
-                        ]
-                    ),
+                    "node_id": (self.api.identity["node_id"]),
                 },
             )
             return
@@ -1116,11 +1016,7 @@ class RequestHandler(
 
             self._send_json(
                 200,
-                {
-                    "plugins": (
-                        self.api.plugin_load_results
-                    )
-                },
+                {"plugins": (self.api.plugin_load_results)},
             )
             return
 
@@ -1130,11 +1026,7 @@ class RequestHandler(
 
             self._send_json(
                 200,
-                {
-                    "workers": (
-                        self.api.workers.list_workers()
-                    )
-                },
+                {"workers": (self.api.workers.list_workers())},
             )
             return
 
@@ -1144,11 +1036,7 @@ class RequestHandler(
 
             self._send_json(
                 200,
-                {
-                    "jobs": (
-                        self.api.jobs.list_jobs()
-                    )
-                },
+                {"jobs": (self.api.jobs.list_jobs())},
             )
             return
 
@@ -1156,13 +1044,9 @@ class RequestHandler(
             if not self._require_auth():
                 return
 
-            job_id = path[
-                len("/jobs/"):
-            ].strip()
+            job_id = path[len("/jobs/") :].strip()
 
-            job = self.api.jobs.get(
-                job_id
-            )
+            job = self.api.jobs.get(job_id)
 
             if job is None:
                 self._send_json(
@@ -1225,24 +1109,14 @@ class RequestHandler(
         info = self.api.capabilities_info()
         identity = self.api.identity_info()
 
-        plugin_results = list(
-            getattr(self.api, "plugin_load_results", []) or []
-        )
+        plugin_results = list(getattr(self.api, "plugin_load_results", []) or [])
         plugin_rows = []
 
         for plugin in plugin_results:
-            name = str(
-                plugin.get("name")
-                or plugin.get("plugin_id")
-                or "Unbekannt"
-            )
+            name = str(plugin.get("name") or plugin.get("plugin_id") or "Unbekannt")
             version = str(plugin.get("version") or "-")
             loaded = plugin.get("loaded")
-            error = str(
-                plugin.get("error")
-                or plugin.get("detail")
-                or ""
-            ).strip()
+            error = str(plugin.get("error") or plugin.get("detail") or "").strip()
             workers = plugin.get("workers") or []
 
             state_class = "starting"
@@ -1256,19 +1130,12 @@ class RequestHandler(
                 state_class = "error"
                 state_text = "Fehler"
 
-            worker_text = (
-                ", ".join(str(item) for item in workers)
-                or "Keine"
-            )
+            worker_text = ", ".join(str(item) for item in workers) or "Keine"
 
             error_html = ""
 
             if error:
-                error_html = (
-                    '<div class="plugin-error">'
-                    + html_lib.escape(error)
-                    + "</div>"
-                )
+                error_html = '<div class="plugin-error">' + html_lib.escape(error) + "</div>"
 
             plugin_rows.append(
                 '<div class="plugin-row">'
@@ -1285,18 +1152,17 @@ class RequestHandler(
         plugins_html = "".join(plugin_rows)
 
         if not plugins_html:
-            plugins_html = (
-                '<div class="plugin-empty">'
-                "Keine Plugins installiert oder geladen."
-                "</div>"
-            )
+            plugins_html = '<div class="plugin-empty">Keine Plugins installiert oder geladen.</div>'
 
         accelerators = info.get("accelerators") or []
-        gpu_names = ", ".join(
-            str(item.get("name", "")).strip()
-            for item in accelerators
-            if str(item.get("name", "")).strip()
-        ) or "Keine GPU erkannt"
+        gpu_names = (
+            ", ".join(
+                str(item.get("name", "")).strip()
+                for item in accelerators
+                if str(item.get("name", "")).strip()
+            )
+            or "Keine GPU erkannt"
+        )
 
         platform_name = str(info.get("platform") or "Windows")
         machine = str(info.get("machine") or "AMD64")
@@ -1304,9 +1170,7 @@ class RequestHandler(
 
         activity_status = self.api.activity.status()
 
-        node_state = str(
-            activity_status.get("state") or "ready"
-        )
+        node_state = str(activity_status.get("state") or "ready")
 
         node_state_class = "ready"
         node_state_text = "Aktiv"
@@ -1325,14 +1189,9 @@ class RequestHandler(
         if node_state == "error":
             node_state_class = "error"
             node_state_text = "Fehler"
-            node_state_detail = str(
-                activity_status.get("last_error")
-                or "Lifecycle-Fehler"
-            )
+            node_state_detail = str(activity_status.get("last_error") or "Lifecycle-Fehler")
 
-        mediahub_connected = bool(
-            activity_status.get("mediahub_connected")
-        )
+        mediahub_connected = bool(activity_status.get("mediahub_connected"))
 
         mediahub_state_class = "offline"
         mediahub_state_text = "Nicht verbunden"
@@ -1341,14 +1200,10 @@ class RequestHandler(
             mediahub_state_class = "ready"
             mediahub_state_text = "Verbunden"
 
-        active_jobs = int(
-            activity_status.get("active_jobs") or 0
-        )
+        active_jobs = int(activity_status.get("active_jobs") or 0)
 
         idle_seconds = activity_status.get("idle_seconds")
-        idle_timeout = float(
-            activity_status.get("idle_timeout_seconds") or 0.0
-        )
+        idle_timeout = float(activity_status.get("idle_timeout_seconds") or 0.0)
 
         last_seen_text = "Noch kein Heartbeat"
 
@@ -1364,10 +1219,7 @@ class RequestHandler(
             )
             remaining_minutes = remaining // 60
             remaining_seconds = remaining % 60
-            sleep_text = (
-                f"{remaining_minutes:02d}:"
-                f"{remaining_seconds:02d} Minuten"
-            )
+            sleep_text = f"{remaining_minutes:02d}:{remaining_seconds:02d} Minuten"
 
         if node_state == "sleeping":
             sleep_text = "Aktiv"
@@ -1651,15 +1503,14 @@ h1 {{
             format % args,
         )
 
+
 def create_server(
     runtime_dir: Path,
     host: str,
     port: int,
 ) -> tuple[ThreadingHTTPServer, ComputeNodeAPI]:
     """Create the Compute Node API without starting its serve loop."""
-    api = ComputeNodeAPI(
-        runtime_dir
-    )
+    api = ComputeNodeAPI(runtime_dir)
 
     RequestHandler.api = api
 
@@ -1682,10 +1533,7 @@ def run_server(
         port=port,
     )
 
-    print(
-        f"Compute-Node API aktiv: "
-        f"http://{host}:{port}"
-    )
+    print(f"Compute-Node API aktiv: http://{host}:{port}")
 
     print(
         "Endpunkte: "
@@ -1713,9 +1561,7 @@ def run_server(
         server.serve_forever()
     except KeyboardInterrupt:
         print()
-        print(
-            "Compute-Node API wird beendet."
-        )
+        print("Compute-Node API wird beendet.")
     finally:
         api.activity.stop_watcher()
         server.server_close()

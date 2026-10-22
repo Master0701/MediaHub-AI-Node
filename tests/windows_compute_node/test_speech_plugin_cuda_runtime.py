@@ -125,61 +125,41 @@ def test_cuda_backend_checks_cuda_runtime(
     install_cuda.assert_not_called()
 
 
-def test_missing_cuda_runtime_is_installed(
+def test_missing_cuda_runtime_requires_confirmed_installation(
     monkeypatch,
     runtime_ready,
 ):
-    inspect_cuda = Mock(
-        return_value={
-            "ready": False,
-        }
-    )
+    import pytest
 
-    install_cuda = Mock(
-        return_value={
-            "ready": True,
-        }
-    )
+    inspect_cuda = Mock(return_value={"ready": False})
+    install_cuda = Mock(return_value={"ready": True})
 
     monkeypatch.setattr(
-        plugin,
-        "inspect_cuda_runtime",
-        inspect_cuda,
+        plugin, "inspect_cuda_runtime", inspect_cuda
     )
-
     monkeypatch.setattr(
-        plugin,
-        "install_cuda_dependencies",
-        install_cuda,
+        plugin, "install_cuda_dependencies", install_cuda
     )
 
     handler = plugin.create_handler(
         _context(
             _capabilities(
                 vendor="NVIDIA",
-                backend_family=[
-                    "cuda",
-                    "directml",
-                ],
+                backend_family=["cuda", "directml"],
             )
         )
     )
 
-    result = handler(
-        {
-            "execution": {
-                "mode": "gpu",
-            },
-            "payload": {
-                "input": "test.wav",
-            },
-        }
-    )
-
-    assert result["execution"]["backend"] == "cuda"
+    with pytest.raises(RuntimeError, match="CUDA"):
+        handler(
+            {
+                "execution": {"mode": "gpu"},
+                "payload": {"input": "test.wav"},
+            }
+        )
 
     inspect_cuda.assert_called_once_with()
-    install_cuda.assert_called_once_with()
+    install_cuda.assert_not_called()
 
 
 def test_cpu_backend_does_not_touch_cuda_runtime(

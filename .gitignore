@@ -46,3 +46,9 @@ docs/generated/*.html
 Thumbs.db
 # Local environment snapshot
 requirements-installed.txt
+/development/windows_compute_node/backups/
+/development/windows_compute_node/build/
+/development/windows_compute_node/dist/
+/development/windows_compute_node/installed/
+/development/windows_compute_node/logs/
+/development/windows_compute_node/release/

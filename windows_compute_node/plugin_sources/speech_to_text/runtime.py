@@ -34,9 +34,16 @@ def runtime_base_python() -> Path:
         _load_python_runtime_provider()
     )
 
-    return Path(
-        provider.require_python()
-    )
+    result = provider.inspect_managed_python()
+
+    if not result["ready"]:
+        raise RuntimeError(
+            "Verwaltete Python-3.12.10-Runtime "
+            "ist nicht bereit: "
+            + result.get("error", "Python-Runtime fehlt.")
+        )
+
+    return Path(result["executable"])
 
 
 def default_runtime_root() -> Path:
@@ -45,10 +52,14 @@ def default_runtime_root() -> Path:
     )
 
     if override:
-        return (
-            Path(override)
-            / RUNTIME_NAME
+        # Reuse the original Windows Compute Node Speech runtime when present.
+        legacy_root = Path(override) / RUNTIME_NAME
+        legacy_python = legacy_root / "venv" / (
+            "Scripts/python.exe" if os.name == "nt" else "bin/python"
         )
+        if legacy_python.is_file():
+            return legacy_root
+        return Path(override) / "plugin_runtimes" / RUNTIME_NAME
 
     return (
         Path.home()
@@ -127,30 +138,9 @@ def _venv_python_path(
 def venv_python(
     root: Path | None = None,
 ) -> Path:
-    """Return the interpreter used by the Speech runtime.
+    """Return the isolated Speech-to-Text venv interpreter."""
+    return _venv_python_path(root)
 
-    A traditional per-plugin venv remains preferred when it
-    already exists.  MediaHub's managed private Python can be
-    used directly when it intentionally has no venv module.
-    """
-
-    venv_path = _venv_python_path(root)
-
-    if venv_path.is_file():
-        return venv_path
-
-    base_python = runtime_base_python()
-
-    if (
-        base_python.is_file()
-        and not _python_has_module(
-            base_python,
-            "venv",
-        )
-    ):
-        return base_python
-
-    return venv_path
 
 def inspect_runtime(
     root: Path | None = None,
@@ -256,12 +246,11 @@ def create_runtime(
         runtime_mode = "venv"
 
     else:
-        # MediaHub managed/private Python distributions may
-        # intentionally omit the stdlib venv package.
-        # They are already isolated from the host Python and
-        # can therefore act as the plugin runtime directly.
-        python_path = base_python
-        runtime_mode = "managed_private_python"
+        raise RuntimeError(
+            "Speech-to-Text benoetigt eine eigene virtuelle "
+            "Python-Umgebung. Die gemeinsame Python-Basis "
+            "darf nicht fuer Plugin-Pakete verwendet werden."
+        )
 
     if not python_path.is_file():
         raise RuntimeError(
@@ -314,7 +303,8 @@ def install_dependencies(
             "-m",
             "pip",
             "install",
-            "faster-whisper",
+            "faster-whisper==1.2.1",
+            "av==16.0.1",
         ],
         check=True,
     )

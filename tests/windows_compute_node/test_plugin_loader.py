@@ -189,3 +189,130 @@ def test_empty_plugin_directory(
     )
 
     assert loader.load_all() == []
+
+
+
+def test_loader_blocks_missing_dependency_before_code_execution(tmp_path):
+    import json
+
+    import pytest
+
+    from windows_compute_node.plugins.loader import (
+        ComputePluginLoader,
+        PluginLoadError,
+    )
+    from windows_compute_node.workers.registry import WorkerRegistry
+
+    plugin_root = tmp_path / "plugins"
+    plugin_dir = plugin_root / "mediahub.smolvlm2"
+    plugin_dir.mkdir(parents=True)
+
+    marker = tmp_path / "plugin_was_executed.txt"
+
+    manifest = {
+        "id": "mediahub.smolvlm2",
+        "name": "MediaHub SmolVLM2",
+        "version": "0.1.1",
+        "type": "provider",
+        "entrypoint": "plugin.py",
+        "dependencies": [{
+            "id": "mediahub.python_runtime",
+            "minimum_version": "0.1.0",
+            "targets": ["windows_compute"],
+        }],
+    }
+
+    (plugin_dir / "plugin.json").write_text(
+        json.dumps(manifest),
+        encoding="utf-8",
+    )
+
+    plugin_code = (
+        "from pathlib import Path" + chr(10)
+        + f"Path({str(marker)!r}).write_text('executed')" + chr(10)
+    )
+
+    (plugin_dir / "plugin.py").write_text(
+        plugin_code,
+        encoding="utf-8",
+    )
+
+    loader = ComputePluginLoader(
+        plugin_root=plugin_root,
+        workers=WorkerRegistry(),
+    )
+
+    with pytest.raises(PluginLoadError, match="mediahub.python_runtime"):
+        loader.load_plugin(plugin_dir)
+
+    assert not marker.exists()
+
+
+def test_loader_blocks_unhealthy_python_runtime_before_execution(
+    tmp_path, monkeypatch
+):
+    import json
+
+    import pytest
+
+    from windows_compute_node.plugins.loader import (
+        ComputePluginLoader,
+        PluginLoadError,
+    )
+    from windows_compute_node.workers.registry import WorkerRegistry
+
+    plugin_root = tmp_path / "plugins"
+    runtime_dir = plugin_root / "mediahub.python_runtime"
+    runtime_dir.mkdir(parents=True)
+
+    (runtime_dir / "plugin.json").write_text(
+        json.dumps({
+            "id": "mediahub.python_runtime",
+            "version": "0.1.0",
+            "type": "utility",
+            "entrypoint": "plugin:MediaHubPythonRuntimePlugin",
+        }),
+        encoding="utf-8",
+    )
+
+    plugin_dir = plugin_root / "mediahub.smolvlm2"
+    plugin_dir.mkdir()
+
+    (plugin_dir / "plugin.json").write_text(
+        json.dumps({
+            "id": "mediahub.smolvlm2",
+            "name": "MediaHub SmolVLM2",
+            "version": "0.1.1",
+            "type": "provider",
+            "entrypoint": "plugin.py",
+            "dependencies": [{
+                "id": "mediahub.python_runtime",
+                "minimum_version": "0.1.0",
+                "targets": ["windows_compute"],
+            }],
+        }),
+        encoding="utf-8",
+    )
+
+    marker = tmp_path / "plugin_was_executed.txt"
+
+    (plugin_dir / "plugin.py").write_text(
+        "from pathlib import Path" + chr(10)
+        + f"Path({str(marker)!r}).write_text('executed')" + chr(10),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv(
+        "MEDIAHUB_COMPUTE_RUNTIME",
+        str(tmp_path / "missing_runtime"),
+    )
+
+    loader = ComputePluginLoader(
+        plugin_root=plugin_root,
+        workers=WorkerRegistry(),
+    )
+
+    with pytest.raises(PluginLoadError, match="mediahub.python_runtime"):
+        loader.load_plugin(plugin_dir)
+
+    assert not marker.exists()

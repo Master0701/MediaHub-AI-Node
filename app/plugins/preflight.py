@@ -75,11 +75,17 @@ class PluginPreflightChecker:
         self,
         *,
         installed_plugin_ids: Iterable[str] = (),
+        target_node: str | None = None,
     ) -> None:
         self.installed_plugin_ids = {
             plugin_id.strip().lower()
             for plugin_id in installed_plugin_ids
         }
+        self.target_node = (
+            target_node.strip().lower()
+            if target_node is not None
+            else None
+        )
 
     def inspect(
         self,
@@ -133,6 +139,12 @@ class PluginPreflightChecker:
                 ),
             )
             for dependency in package.manifest.dependencies
+            if (
+                not dependency.targets
+                or self.target_node is None
+                or self.target_node not in {"windows_compute", "raspberry_pi"}
+                or self.target_node in dependency.targets
+            )
         )
 
         warnings: list[str] = []

@@ -1,4 +1,4 @@
-﻿"""Shared Python runtime selection for MediaHub Windows Compute Node."""
+"""Shared Python runtime selection for MediaHub Windows Compute Node."""
 
 from __future__ import annotations
 
@@ -106,32 +106,24 @@ def configured_python() -> Path | None:
 
 
 def private_python() -> Path | None:
-    """Return the managed private MediaHub Compute Python."""
+    """Return a verified private Python from configured or user runtime roots."""
+    configured = os.environ.get("MEDIAHUB_COMPUTE_RUNTIME")
+    roots = []
+    if configured:
+        roots.append(Path(configured))
+    user_root = Path.home() / ".mediahub" / "compute_node"
+    if user_root not in roots:
+        roots.append(user_root)
 
-    runtime_base = os.environ.get(
-        "MEDIAHUB_COMPUTE_RUNTIME"
-    )
-
-    if runtime_base:
-        base = Path(runtime_base)
-    else:
-        base = (
-            Path.home()
-            / ".mediahub"
-            / "compute_node"
-        )
-
-    executable = (
-        base
-        / "private_python"
-        / "cpython-3.12.10-x64"
-        / "python.exe"
-    )
-
-    if not executable.is_file():
-        return None
-
-    return executable
+    for base in roots:
+        for directory in (
+            "cpython-3.12.10-x64-astral-20250409",
+            "cpython-3.12.10-x64",
+        ):
+            executable = base / "private_python" / directory / "python.exe"
+            if executable.is_file() and inspect_managed_python(executable).get("ready"):
+                return executable
+    return None
 
 
 def launcher_candidates() -> list[Path]:
@@ -246,3 +238,57 @@ def require_python() -> Path:
     return Path(
         result["python"]["executable"]
     )
+
+
+def inspect_managed_python(
+    executable: str | Path | None = None,
+) -> dict[str, Any]:
+    """Check the managed portable CPython 3.12.10 x64 runtime."""
+    if executable is None:
+        base = os.environ.get("MEDIAHUB_COMPUTE_RUNTIME")
+        root = (
+            Path(base)
+            if base
+            else Path.home() / ".mediahub" / "compute_node"
+        )
+        executable = (
+            root / "private_python" / "cpython-3.12.10-x64-astral-20250409" / "python.exe"
+            if base
+            else (
+                private_python()
+                or root / "private_python" / "cpython-3.12.10-x64-astral-20250409" / "python.exe"
+            )
+        )
+
+    python = Path(executable)
+    result: dict[str, Any] = {
+        "executable": str(python),
+        "available": python.is_file(),
+        "ready": False,
+    }
+    if not result["available"]:
+        return result
+
+    code = (
+        "import sys, venv, ensurepip; "
+        "assert sys.version_info[:3] == (3, 12, 10); "
+        "assert sys.maxsize > 2**32"
+    )
+    try:
+        completed = subprocess.run(
+            [str(python), "-I", "-c", code],
+            capture_output=True,
+            text=True,
+            timeout=15,
+            check=False,
+        )
+        result["ready"] = completed.returncode == 0
+        if not result["ready"]:
+            result["error"] = (
+                completed.stderr.strip()
+                or f"Python-Pruefung fehlgeschlagen: {completed.returncode}"
+            )
+    except (OSError, subprocess.TimeoutExpired) as exc:
+        result["error"] = str(exc)
+
+    return result

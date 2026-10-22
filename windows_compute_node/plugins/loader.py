@@ -247,6 +247,107 @@ class ComputePluginLoader:
                 "Manifest muss ein Objekt sein."
             )
 
+        # Abhaengigkeiten vor Ausfuehrung von Plugin-Code pruefen.
+        dependencies = manifest.get("dependencies", [])
+
+        if not isinstance(dependencies, list):
+            raise PluginLoadError(
+                "Ungueltige Plugin-Abhaengigkeiten."
+            )
+
+        for dependency in dependencies:
+            if not isinstance(dependency, dict):
+                raise PluginLoadError(
+                    "Ungueltige Plugin-Abhaengigkeit."
+                )
+
+            targets = dependency.get("targets", [])
+            if (
+                not isinstance(targets, list)
+                or not all(isinstance(item, str) for item in targets)
+            ):
+                raise PluginLoadError(
+                    "Ungueltige Abhaengigkeits-Ziele."
+                )
+
+            if targets and "windows_compute" not in targets:
+                continue
+
+            dependency_id = dependency.get("id")
+            if (
+                not isinstance(dependency_id, str)
+                or not dependency_id
+                or dependency_id in {".", ".."}
+                or "/" in dependency_id
+                or "\\" in dependency_id
+            ):
+                raise PluginLoadError(
+                    "Ungueltige Abhaengigkeits-ID."
+                )
+
+            dependency_dir = self.plugin_root / dependency_id
+            dependency_manifest_path = dependency_dir / "plugin.json"
+
+            if (
+                dependency_dir.is_symlink()
+                or not dependency_manifest_path.is_file()
+                or dependency_manifest_path.is_symlink()
+            ):
+                raise PluginLoadError(
+                    f"Plugin-Abhaengigkeit fehlt: {dependency_id}"
+                )
+
+            try:
+                installed = json.loads(
+                    dependency_manifest_path.read_text(
+                        encoding="utf-8-sig"
+                    )
+                )
+                if (
+                    not isinstance(installed, dict)
+                    or installed.get("id") != dependency_id
+                ):
+                    raise ValueError("Plugin-ID stimmt nicht")
+
+                minimum = dependency.get("minimum_version")
+                if minimum:
+                    if not isinstance(minimum, str):
+                        raise ValueError("Ungueltige Mindestversion")
+
+                    def version_parts(value):
+                        parts = value.split(".")
+                        if not parts or not all(
+                            part.isascii() and part.isdecimal()
+                            for part in parts
+                        ):
+                            raise ValueError("Ungueltige Version")
+                        return tuple(int(part) for part in parts)
+
+                    installed_version = installed.get("version")
+                    if not isinstance(installed_version, str):
+                        raise ValueError("Installierte Version fehlt")
+
+                    if version_parts(installed_version) < version_parts(minimum):
+                        raise ValueError("Version ist zu alt")
+
+            except (OSError, UnicodeError, ValueError, TypeError) as exc:
+                raise PluginLoadError(
+                    f"Plugin-Abhaengigkeit {dependency_id} "
+                    "ist nicht gueltig oder zu alt."
+                ) from exc
+
+            if dependency_id == "mediahub.python_runtime":
+                from windows_compute_node.runtime_support.python_runtime import (
+                    inspect_managed_python,
+                )
+
+                runtime = inspect_managed_python()
+                if not runtime["ready"]:
+                    raise PluginLoadError(
+                        "mediahub.python_runtime ist nicht bereit: "
+                        + runtime.get("error", "Python-Runtime fehlt.")
+                    )
+
         plugin_id = str(
             manifest.get("id")
             or ""

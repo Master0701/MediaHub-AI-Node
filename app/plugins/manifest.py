@@ -36,6 +36,7 @@ class PluginDependency:
 
     plugin_id: str
     minimum_version: str | None = None
+    targets: tuple[str, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -139,6 +140,7 @@ class PluginManifest:
                         if item.get("minimum_version")
                         else None
                     ),
+                    targets=_dependency_targets(item.get("targets", [])),
                 )
             )
 
@@ -210,6 +212,22 @@ class PluginManifest:
             )
 
         return cls.from_dict(data)
+
+
+def _dependency_targets(value: object) -> tuple[str, ...]:
+    """Validiert Zielplattformen einer Plugin-Abhaengigkeit."""
+    if not isinstance(value, list):
+        raise PluginManifestError(
+            "'targets' einer Plugin-Abhaengigkeit muss eine Liste sein."
+        )
+    if any(
+        not isinstance(item, str) or not item.strip()
+        for item in value
+    ):
+        raise PluginManifestError(
+            "Ungueltige Zielplattform in Plugin-Abhaengigkeit."
+        )
+    return tuple(item.strip().lower() for item in value)
 
 
 def _parse_tool_requirements(

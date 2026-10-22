@@ -57,56 +57,75 @@ def test_provider_loader():
     )
 
 
-def test_runtime_base_python_rejects_unsupported_host():
+def test_runtime_base_python_rejects_unsupported_host(monkeypatch):
     runtime = load_runtime()
+    provider = runtime._load_python_runtime_provider()
 
-    provider = (
-        runtime
-        ._load_python_runtime_provider()
+    monkeypatch.setattr(
+        provider,
+        "inspect_managed_python",
+        lambda: {
+            "executable": "missing-python.exe",
+            "available": False,
+            "ready": False,
+        },
     )
 
-    discovery = (
-        provider.discover_python()
-    )
-
-    if discovery["found"]:
-        pytest.skip(
-            "Kompatibler Runtime-Python "
-            "ist auf diesem Rechner vorhanden."
-        )
-
-    with pytest.raises(RuntimeError):
+    with pytest.raises(RuntimeError, match="nicht bereit"):
         runtime.runtime_base_python()
 
 
 def test_create_runtime_does_not_fallback_to_host_python(
-    tmp_path,
+    tmp_path, monkeypatch,
 ):
     runtime = load_runtime()
+    provider = runtime._load_python_runtime_provider()
 
-    provider = (
-        runtime
-        ._load_python_runtime_provider()
+    monkeypatch.setattr(
+        provider,
+        "inspect_managed_python",
+        lambda: {
+            "executable": "missing-python.exe",
+            "available": False,
+            "ready": False,
+        },
     )
 
-    discovery = (
-        provider.discover_python()
-    )
-
-    if discovery["found"]:
-        pytest.skip(
-            "Kompatibler Runtime-Python "
-            "ist auf diesem Rechner vorhanden."
-        )
-
-    with pytest.raises(RuntimeError):
-        runtime.create_runtime(
-            tmp_path
-        )
+    with pytest.raises(RuntimeError, match="nicht bereit"):
+        runtime.create_runtime(tmp_path)
 
     assert not (
-        tmp_path
-        / "venv"
-        / "Scripts"
-        / "python.exe"
+        tmp_path / "venv" / "Scripts" / "python.exe"
     ).is_file()
+
+
+
+def test_speech_requires_managed_python(monkeypatch):
+    runtime = load_runtime()
+    provider = runtime._load_python_runtime_provider()
+
+    def missing_managed_python():
+        return {
+            "executable": "missing-python.exe",
+            "available": False,
+            "ready": False,
+        }
+
+    def forbidden_fallback():
+        raise AssertionError(
+            "Speech darf nicht auf require_python zurueckfallen."
+        )
+
+    monkeypatch.setattr(
+        provider,
+        "inspect_managed_python",
+        missing_managed_python,
+    )
+    monkeypatch.setattr(
+        provider,
+        "require_python",
+        forbidden_fallback,
+    )
+
+    with pytest.raises(RuntimeError):
+        runtime.runtime_base_python()
