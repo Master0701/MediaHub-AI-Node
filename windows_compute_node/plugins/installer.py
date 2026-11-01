@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import importlib.util
 import json
 import os
 import re
@@ -29,6 +30,190 @@ class ComputePluginInstaller:
             parents=True,
             exist_ok=True,
         )
+
+    def _prepare_gliner_runtime(
+        self, manifest: dict[str, Any], package_root: Path
+    ) -> dict[str, Any]:
+        """Use the existing, GPU-aware GLiNER runtime installer on Windows."""
+        if manifest.get("id") != "mediahub.gliner":
+            raise PluginInstallError("Ungueltiges GLiNER-Plugin.")
+        runtime = manifest.get("runtime")
+        if (
+            not isinstance(runtime, dict)
+            or runtime.get("engine") != "gliner"
+            or runtime.get("isolated") is not True
+        ):
+            raise PluginInstallError("GLiNER benoetigt seine deklarierte isolierte Runtime.")
+        manager_file = package_root / "runtime_manager.py"
+        if not manager_file.is_file():
+            raise PluginInstallError("GLiNER-Runtime-Manager fehlt im Plugin-Paket.")
+
+        spec = importlib.util.spec_from_file_location(
+            "mediahub_gliner_install_runtime", manager_file
+        )
+        if spec is None or spec.loader is None:
+            raise PluginInstallError("GLiNER-Runtime-Manager kann nicht geladen werden.")
+        manager = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(manager)
+
+        from windows_compute_node.hardware.capabilities import get_capabilities
+
+        capabilities = get_capabilities()
+        requested_profile = (
+            os.environ.get("MEDIAHUB_GLINER_INSTALL_PROFILE", "auto").strip().lower()
+        )
+        if requested_profile not in {"auto", "cpu", "cuda"}:
+            raise PluginInstallError("Ungueltiges GLiNER-Installationsprofil.")
+        selection = manager.select_install_profile(
+            requested=requested_profile, capabilities=capabilities
+        )
+        profile = selection["selected"]
+        status = manager.inspect_runtime()
+        acceleration = manager.inspect_acceleration() if status.get("ready") else {}
+        matching = bool(status.get("ready")) and (
+            bool(acceleration.get("cuda_available")) if profile == "cuda"
+            else not bool(acceleration.get("cuda_built"))
+        )
+        if matching:
+            return {
+                **status, "install_profile": selection,
+                "acceleration": acceleration, "reused": True,
+            }
+
+        # An existing runtime is user data: do not silently replace or migrate it.
+        root = manager.default_runtime_root()
+        if (root / "venv").exists() or (root / "packages").exists():
+            raise PluginInstallError(
+                "GLiNER-Runtime ist vorhanden, passt aber nicht zum erkannten "
+                f"{profile.upper()}-Profil. Keine automatische Ueberschreibung: {root}"
+            )
+
+        try:
+            installed = manager.install_dependencies(profile=profile, capabilities=capabilities)
+        except Exception as exc:
+            raise PluginInstallError(
+                f"GLiNER-{profile.upper()}-Runtime konnte nicht installiert werden: {exc}"
+            ) from exc
+        if not installed.get("ready"):
+            raise PluginInstallError("GLiNER-Runtime wurde installiert, ist aber nicht bereit.")
+        if profile == "cuda" and not installed.get("acceleration", {}).get("cuda_available"):
+            raise PluginInstallError("GLiNER-CUDA-Runtime ist nach Installation nicht verfuegbar.")
+        return {**installed, "reused": False}
+
+    def _prepare_smolvlm2_runtime(
+        self, manifest: dict[str, Any], package_root: Path
+    ) -> dict[str, Any]:
+        """Prepare SmolVLM2 with its own installer, analogous to GLiNER."""
+        if manifest.get("id") != "mediahub.smolvlm2":
+            raise PluginInstallError("Ungueltiges SmolVLM2-Plugin.")
+        runtime = manifest.get("runtime")
+        if (
+            not isinstance(runtime, dict)
+            or runtime.get("engine") != "smolvlm2"
+            or runtime.get("isolated") is not True
+        ):
+            raise PluginInstallError("SmolVLM2 benoetigt seine deklarierte isolierte Runtime.")
+        manager_file = package_root / "runtime.py"
+        if not manager_file.is_file():
+            raise PluginInstallError("SmolVLM2-Runtime-Manager fehlt im Plugin-Paket.")
+        spec = importlib.util.spec_from_file_location(
+            "mediahub_smolvlm2_install_runtime", manager_file
+        )
+        if spec is None or spec.loader is None:
+            raise PluginInstallError("SmolVLM2-Runtime-Manager kann nicht geladen werden.")
+        manager = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(manager)
+
+        requested = os.environ.get("MEDIAHUB_SMOLVLM2_INSTALL_PROFILE", "auto").strip().lower()
+        if requested not in {"auto", "cpu", "cuda"}:
+            raise PluginInstallError("Ungueltiges SmolVLM2-Installationsprofil.")
+        existing = manager.inspect_runtime()
+        if existing.get("ready"):
+            torch = existing.get("torch") or {}
+            if requested == "cuda" and not torch.get("cuda_available"):
+                raise PluginInstallError(
+                    "Vorhandene SmolVLM2-Runtime hat kein nutzbares CUDA; "
+                    "keine automatische Ueberschreibung."
+                )
+            if requested == "cpu" and torch.get("cuda_runtime"):
+                raise PluginInstallError(
+                    "Vorhandene SmolVLM2-Runtime nutzt CUDA; "
+                    "keine automatische Ueberschreibung."
+                )
+            return {**existing, "reused": True}
+        root = manager.runtime_root()
+        if (root / "venv").exists():
+            raise PluginInstallError(
+                "Vorhandene SmolVLM2-Runtime ist nicht bereit. "
+                f"Keine automatische Ueberschreibung: {root}"
+            )
+        try:
+            installed = manager.install_dependencies(requested_backend=requested)
+        except Exception as exc:
+            raise PluginInstallError(
+                f"SmolVLM2-Runtime konnte nicht installiert werden: {exc}"
+            ) from exc
+        if not installed.get("ready"):
+            raise PluginInstallError("SmolVLM2-Runtime wurde installiert, ist aber nicht bereit.")
+        if (
+            (requested == "cuda" or installed.get("selected_backend") == "cuda")
+            and not (installed.get("torch") or {}).get("cuda_available")
+        ):
+            raise PluginInstallError(
+                "SmolVLM2-CUDA-Runtime ist nach Installation nicht verfuegbar."
+            )
+        return {**installed, "reused": False}
+
+    def _prepare_smolvlm2_model(
+        self, manifest: dict[str, Any], package_root: Path, runtime_status: dict[str, Any] | None
+    ) -> dict[str, Any]:
+        """Provision the required MediaHub_Tools asset before publishing the plugin."""
+        if not runtime_status or not runtime_status.get("ready"):
+            raise PluginInstallError("SmolVLM2-Modell benoetigt eine bereite Runtime.")
+        tools = manifest.get("required_tools")
+        if not isinstance(tools, list):
+            raise PluginInstallError("SmolVLM2 required_tools fehlt oder ist ungueltig.")
+        matching = [
+            item for item in tools
+            if isinstance(item, dict) and item.get("id") == "smolvlm2-model"
+                    and (not item.get("targets") or "windows_compute" in item["targets"])]
+        if (
+            len(matching) != 1
+            or matching[0].get("required") is not True
+            or matching[0].get("source") != "mediahub_tools"
+            or str(matching[0].get("version")) != "0.1.0"
+        ):
+            raise PluginInstallError(
+                "SmolVLM2-Modellabhaengigkeit ist ungueltig oder nicht unterstuetzt."
+            )
+        manager_file = package_root / "model_manager.py"
+        if not manager_file.is_file():
+            raise PluginInstallError("SmolVLM2-Modell-Manager fehlt im Plugin-Paket.")
+        spec = importlib.util.spec_from_file_location(
+            "mediahub_smolvlm2_install_model", manager_file
+        )
+        if spec is None or spec.loader is None:
+            raise PluginInstallError("SmolVLM2-Modell-Manager kann nicht geladen werden.")
+        manager = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(manager)
+        models_root = Path(runtime_status["root"]) / "models"
+        try:
+            try:
+                existing = manager.resolve_model_path(models_root)
+            except RuntimeError:
+                existing = None
+            if existing is not None:
+                return {"ready": True, "model_path": str(existing), "reused": True,
+                        "tool_id": "smolvlm2-model", "source": "mediahub_tools"}
+            installed = manager.install_model(models_root)
+            verified = manager.resolve_model_path(models_root)
+            if not installed.get("installed") or not installed.get("ready"):
+                raise PluginInstallError("SmolVLM2-Modell wurde nicht vollstaendig installiert.")
+            return {**installed, "ready": True, "model_path": str(verified), "reused": False}
+        except Exception as exc:
+            raise PluginInstallError(
+                f"SmolVLM2-Modell konnte nicht bereitgestellt werden: {exc}"
+            ) from exc
 
     def _prepare_isolated_runtime(self, manifest: dict[str, Any]) -> dict[str, Any] | None:
         """Provision declared Python dependencies without modifying base Python."""
@@ -179,6 +364,141 @@ class ComputePluginInstaller:
                 shutil.rmtree(venv_dir, ignore_errors=True)
             raise
 
+    def _prepare_declared_model(
+        self, manifest: dict[str, Any], runtime_status: dict[str, Any] | None
+    ) -> dict[str, Any] | None:
+        """Install a manifest-declared Hugging Face model in the approved isolated runtime."""
+        model = manifest.get("model")
+        if model is None:
+            return None
+        if not isinstance(model, dict):
+            raise PluginInstallError("Modellkonfiguration muss ein Objekt sein.")
+        if not runtime_status or not runtime_status.get("ready"):
+            raise PluginInstallError(
+                "Modell benoetigt eine einsatzbereite isolierte Python-Runtime."
+            )
+
+        repository = model.get("repository")
+        directory = model.get("directory")
+        if (
+            not isinstance(repository, str)
+            or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository)
+                or not isinstance(directory, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", directory)
+                or directory in {".", ".."}):
+            raise PluginInstallError("Ungueltige Modellquelle oder Modellverzeichnis.")
+        if model.get("installation") != "during_plugin_install":
+            raise PluginInstallError("Unbekannte Modell-Installationsart.")
+        required = model.get("required_files")
+        if not isinstance(required, list) or not required or not all(
+            isinstance(name, str)
+            and re.fullmatch(r"[A-Za-z0-9_.-]+", name)
+            and name not in {".", ".."}
+            for name in required
+        ):
+            raise PluginInstallError("Modell-Pflichtdateien muessen sichere Dateinamen sein.")
+        weight_files = model.get("weight_files")
+        if not isinstance(weight_files, list) or not weight_files or not all(
+            isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9_.-]+", name)
+            for name in weight_files
+        ):
+            raise PluginInstallError("Modell-Gewichtsdateien fehlen oder sind ungueltig.")
+        offline_loader = model.get("offline_loader")
+        if offline_loader not in (None, "gliner"):
+            raise PluginInstallError("Unbekannter Offline-Modelltest.")
+
+        root = Path(runtime_status["root"])
+        python = Path(runtime_status["python"])
+        # The GPU-aware GLiNER runtime keeps its modules in a separate
+        # packages/ directory, not in the base interpreter's site-packages.
+        package_dir = runtime_status.get("packages_path")
+        runtime_env = dict(os.environ)
+        if runtime_status.get("mode") == "isolated_target" and package_dir:
+            runtime_env["PYTHONPATH"] = str(package_dir)
+            runtime_env["PYTHONNOUSERSITE"] = "1"
+            runtime_env.pop("PYTHONHOME", None)
+            runtime_env.pop("PYTHONUSERBASE", None)
+        models = root / "models"
+        target = models / directory
+        stage = models / (directory + "_installing")
+
+        def validate(path: Path) -> bool:
+            if not path.is_dir():
+                return False
+            for name in required:
+                candidate = path / name
+                if not candidate.is_file() or candidate.stat().st_size <= 0:
+                    return False
+                if name.endswith(".json"):
+                    try:
+                        if not isinstance(json.loads(candidate.read_text(encoding="utf-8")), dict):
+                            return False
+                    except (OSError, UnicodeError, ValueError):
+                        return False
+            return any(
+                (path / name).is_file() and (path / name).stat().st_size > 0
+                for name in weight_files
+            )
+
+        def offline_check(path: Path) -> None:
+            if offline_loader is None:
+                return
+            script = (
+                "import sys\n"
+                "from gliner import GLiNER\n"
+                "GLiNER.from_pretrained(sys.argv[1], local_files_only=True)\n"
+            )
+            result = subprocess.run(
+                [str(python), "-c", script, str(path)],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                check=False, timeout=600,
+                env={**runtime_env, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},
+            )
+            if result.returncode:
+                raise PluginInstallError(
+                    "Modell kann nicht vollstaendig offline geladen werden "
+                    + f"(Exit-Code {result.returncode}). "
+                    + "STDOUT: " + (result.stdout or "<leer>")[-3000:]
+                    + " STDERR: " + (result.stderr or "<leer>")[-5000:]
+                )
+
+        if target.exists():
+            if not validate(target):
+                raise PluginInstallError(
+                    f"Vorhandenes Modell unvollstaendig; keine Ueberschreibung: {target}"
+                )
+            offline_check(target)
+            return {"ready": True, "path": str(target), "reused": True}
+        if stage.exists():
+            raise PluginInstallError(f"Vorhandenes Modell-Staging bitte pruefen: {stage}")
+        models.mkdir(parents=True, exist_ok=True)
+        script = (
+            "import sys\n"
+            "from huggingface_hub import snapshot_download\n"
+            "snapshot_download(repo_id=sys.argv[1], local_dir=sys.argv[2], max_workers=2)\n"
+        )
+        try:
+            result = subprocess.run(
+                [str(python), "-c", script, repository, str(stage)],
+                capture_output=True, text=True, encoding="utf-8", errors="replace",
+                check=False, timeout=3600,
+                env={**runtime_env, "HF_HUB_OFFLINE": "0", "TRANSFORMERS_OFFLINE": "0"},
+            )
+            if result.returncode:
+                raise PluginInstallError(
+                    "Modell-Download fehlgeschlagen: "
+                    + (result.stderr or result.stdout or "Unbekannter Fehler")[-1600:]
+                )
+            if not validate(stage):
+                raise PluginInstallError("Modell heruntergeladen, aber Pflichtdateien fehlen.")
+            offline_check(stage)
+            stage.rename(target)
+            return {"ready": True, "path": str(target), "reused": False}
+        except subprocess.TimeoutExpired as exc:
+            raise PluginInstallError("Zeitlimit bei Modell-Download oder Offline-Test.") from exc
+        finally:
+            if stage.exists():
+                shutil.rmtree(stage, ignore_errors=True)
+
     def inspect_package(
         self,
         package_path: Path,
@@ -228,6 +548,7 @@ class ComputePluginInstaller:
         package_path: Path,
         *,
         replace: bool = False,
+        speech_profile: str = "cpu",
     ) -> dict[str, Any]:
         package_path = Path(package_path)
 
@@ -358,7 +679,59 @@ class ComputePluginInstaller:
             if not entry_file.is_file():
                 raise PluginInstallError("Entrypoint-Datei fehlt.")
 
-            runtime_status = self._prepare_isolated_runtime(manifest)
+            if plugin_id == "mediahub.gliner":
+                runtime_status = self._prepare_gliner_runtime(manifest, package_root)
+            elif plugin_id == "mediahub.smolvlm2":
+                runtime_status = self._prepare_smolvlm2_runtime(manifest, package_root)
+            else:
+                runtime_status = self._prepare_isolated_runtime(manifest)
+            if plugin_id == "mediahub.speech_to_text":
+                if speech_profile not in {"cpu", "cuda"}:
+                    raise PluginInstallError("Ungueltiges Speech-Installationsprofil.")
+                if speech_profile == "cuda":
+                    if not runtime_status or not runtime_status.get("ready"):
+                        raise PluginInstallError("Speech-Python-Runtime ist nicht bereit.")
+                    cuda_packages = (manifest.get("runtime") or {}).get("cuda_dependencies")
+                    expected = [
+                        "nvidia-cublas-cu12==12.6.4.1",
+                        "nvidia-cudnn-cu12==9.10.2.21",
+                        "nvidia-cuda-runtime-cu12==12.6.77",
+                    ]
+                    if cuda_packages != expected:
+                        raise PluginInstallError("Speech-CUDA-Paketliste ist nicht freigegeben.")
+                    module_path = package_root / "runtime.py"
+                    spec = importlib.util.spec_from_file_location(
+                        "mediahub_speech_cuda_install", module_path
+                    )
+                    if spec is None or spec.loader is None:
+                        raise PluginInstallError("Speech-CUDA-Installer nicht ladbar.")
+                    module = importlib.util.module_from_spec(spec)
+                    spec.loader.exec_module(module)
+                    if tuple(cuda_packages) != tuple(module.CUDA_RUNTIME_PACKAGES):
+                        raise PluginInstallError(
+                "Speech-CUDA-Paketversionen stimmen nicht ueberein."
+            )
+                    try:
+                        cuda_status = module.inspect_cuda_runtime(Path(runtime_status["root"]))
+                        if not cuda_status.get("ready"):
+                            cuda_status = module.install_cuda_dependencies(
+                                Path(runtime_status["root"])
+                            )
+                        if not cuda_status.get("ready"):
+                            raise RuntimeError("CUDA-DLL-Pruefung fehlgeschlagen")
+                    except Exception as exc:
+                        raise PluginInstallError(
+                            f"Speech-CUDA-Installation fehlgeschlagen: {exc}"
+                        ) from exc
+                    runtime_status = {
+                        **runtime_status, "cuda": cuda_status, "install_profile": "cuda"
+                    }
+                else:
+                    runtime_status = {**(runtime_status or {}), "install_profile": "cpu"}
+            if plugin_id == "mediahub.smolvlm2":
+                model_status = self._prepare_smolvlm2_model(manifest, package_root, runtime_status)
+            else:
+                model_status = self._prepare_declared_model(manifest, runtime_status)
 
             backup = None
 
@@ -391,6 +764,7 @@ class ComputePluginInstaller:
             "version": str(manifest["version"]),
             "path": str(target),
             "python_runtime": runtime_status,
+            "model": model_status,
         }
 
     def uninstall(

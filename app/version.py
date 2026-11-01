@@ -1,2 +1,2 @@
 APP_NAME = "MediaHub-KI-Knoten"
-APP_VERSION = "0.8.27"
+APP_VERSION = "0.8.28"

@@ -496,6 +496,8 @@ def run_checks(
         "-m",
         "compileall",
         "-q",
+        "-x",
+        r"windows_compute_node[/\\]runtime[/\\]private_python[/\\]",
         "app",
         "tests",
         "windows_compute_node",

@@ -1,15 +1,26 @@
 from __future__ import annotations
 
 import importlib.util
+import os
 from pathlib import Path
 
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
 
+# The GLiNER source belongs to the separate MediaHub-Plugins repository.
+# An explicit override supports different development directory layouts.
+
+source_override = os.environ.get("MEDIAHUB_GLINER_RUNTIME_MANAGER")
 RUNTIME_FILE = (
-    ROOT / "windows_compute_node" / "runtime"
-    / "plugins" / "mediahub.gliner" / "runtime_manager.py"
+    Path(source_override)
+    if source_override
+    else ROOT.parent / "MediaHub-Plugins" / "ai_node_plugins" / "gliner" / "runtime_manager.py"
+)
+
+pytestmark = pytest.mark.skipif(
+    not RUNTIME_FILE.is_file(),
+    reason=f"GLiNER-Plugin-Quellcode nicht gefunden: {RUNTIME_FILE}",
 )
 
 
@@ -107,6 +118,7 @@ def test_gliner_rejects_packages_from_other_directories(
         env = os.environ.copy()
         env["PYTHONPATH"] = str(foreign)
         kwargs["env"] = env
+        kwargs["stdin"] = subprocess.DEVNULL
         return real_run(command, **kwargs)
 
     monkeypatch.setattr(
@@ -166,6 +178,17 @@ def test_gliner_accepts_packages_from_own_directory(
         lambda: Path(sys.executable),
     )
 
+    # Avoid inheriting an invalid Windows stdin handle under pytest FD capture.
+    # Keep the real subprocess and its package-origin checks intact.
+    import subprocess
+
+    real_run = subprocess.run
+
+    def run_with_valid_stdin(command, **kwargs):
+        kwargs["stdin"] = subprocess.DEVNULL
+        return real_run(command, **kwargs)
+
+    monkeypatch.setattr(module.subprocess, "run", run_with_valid_stdin)
     result = module.inspect_package_runtime(packages)
 
     print("GLiNER-Positivtest:", result)

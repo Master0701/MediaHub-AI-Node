@@ -33,6 +33,7 @@ from windows_compute_node.jobs.input_cleanup import (
 from windows_compute_node.jobs.queue import (
     JobQueue,
 )
+from windows_compute_node.plugins.dependency_plan import resolve
 from windows_compute_node.plugins.installer import (
     ComputePluginInstaller,
     PluginInstallError,
@@ -165,7 +166,7 @@ class ComputeNodeAPI:
                 shutil.rmtree(entry["directory"], ignore_errors=True)
 
     def create_install_plan(
-        self, filename: str, body: bytes, sha256: str, replace: bool
+        self, filename: str, body: bytes, sha256: str, replace: bool, speech_profile: str = "cpu"
     ) -> dict[str, Any]:
         expected = sha256.strip().lower()
         if not re.fullmatch(r"[0-9a-f]{64}", expected):
@@ -194,9 +195,61 @@ class ComputeNodeAPI:
                     not isinstance(x, str) for x in python_packages
                 ):
                     raise PluginInstallError("Ungueltige Python-Abhaengigkeiten.")
+                if speech_profile not in {"cpu", "cuda"}:
+                    raise PluginInstallError("Ungueltiges Speech-Installationsprofil.")
+                if speech_profile != "cpu" and manifest.get("id") != "mediahub.speech_to_text":
+                    raise PluginInstallError("CUDA-Profil ist nur fuer Speech-to-Text zulaessig.")
+                cuda_packages = []
+                if manifest.get("id") == "mediahub.speech_to_text" and speech_profile == "cuda":
+                    cuda_packages = runtime.get("cuda_dependencies", [])
+                    expected_cuda = [
+                        "nvidia-cublas-cu12==12.6.4.1",
+                        "nvidia-cudnn-cu12==9.10.2.21",
+                        "nvidia-cuda-runtime-cu12==12.6.77",
+                    ]
+                    if cuda_packages != expected_cuda:
+                        raise PluginInstallError(
+                            "Speech-CUDA-Abhaengigkeiten fehlen oder weichen "
+                            "von den freigegebenen Versionen ab."
+                        )
                 dependencies = manifest.get("dependencies", [])
                 if not isinstance(dependencies, list):
                     raise PluginInstallError("Ungueltige Plugin-Abhaengigkeiten.")
+                # Resolve the entire dependency chain before the single approval.
+                # Packages are staged by the MediaHub client or operator; no
+                # arbitrary network downloads are performed while planning.
+                catalog = self.runtime_dir / "plugin_package_catalog"
+                steps = resolve(self.plugin_installer, package, catalog)
+                # Snapshot the exact bytes and hashes of every dependency.
+                # Confirmation must not trust mutable catalog files.
+                staged_steps = []
+                for index, step in enumerate(steps):
+                    source = Path(step["package_path"])
+                    staged = directory / f"step_{index}.mhaiplugin"
+                    if source != package:
+                        shutil.copyfile(source, staged)
+                    else:
+                        staged = package
+                    if hashlib.sha256(staged.read_bytes()).hexdigest() != step["sha256"]:
+                        raise PluginInstallError(
+                            "Abhaengigkeitspaket hat sich waehrend der Planung geaendert."
+                        )
+                    staged_steps.append({**step, "package_path": str(staged)})
+                from windows_compute_node.plugins.dependency_plan import (
+                    dependencies as get_plugin_dependencies,
+                )
+                from windows_compute_node.runtime_support import python_runtime
+                needs_managed_python = any(
+                    dep_id == "mediahub.python_runtime"
+                    for step in staged_steps
+                    for dep_id, _ in get_plugin_dependencies(
+                        self.plugin_installer.inspect_package(Path(step["package_path"]))
+                    )
+                )
+                if needs_managed_python:
+                    needs_managed_python = not python_runtime.inspect_managed_python().get(
+                        "ready", False
+                    )
                 response = {
                     "status": "plan_created",
                     "plan_id": plan_id,
@@ -209,6 +262,10 @@ class ComputeNodeAPI:
                     "plan": {
                         "replace": replace,
                         "python_packages": python_packages,
+                        "speech_install_profile": (
+                            speech_profile if plugin_id == "mediahub.speech_to_text" else None
+                        ),
+                        "speech_cuda_packages": cuda_packages,
                         "plugin_dependencies": [
                             x
                             for x in dependencies
@@ -216,6 +273,15 @@ class ComputeNodeAPI:
                             and (not x.get("targets") or "windows_compute" in x.get("targets", []))
                         ],
                         "runtime_isolated": runtime.get("isolated") is True,
+                        "installation_steps": [
+                            {key: value for key, value in step.items() if key != "package_path"}
+                            for step in staged_steps
+                        ],
+                        "managed_python_download": (
+                            "MediaHub_Tools CPython 3.12.10 x64 (HTTPS, verified SHA256)"
+                            if needs_managed_python else None
+                        ),
+                        "confirmation_count": 1,
                     },
                 }
                 self._install_plans[plan_id] = {
@@ -223,6 +289,11 @@ class ComputeNodeAPI:
                     "package": package,
                     "sha256": expected,
                     "replace": replace,
+                    "steps": staged_steps,
+                    "needs_managed_python": needs_managed_python,
+                    "speech_profile": (
+                        speech_profile if plugin_id == "mediahub.speech_to_text" else "cpu"
+                    ),
                     "expires": time.monotonic() + 900,
                 }
                 return response
@@ -247,11 +318,59 @@ class ComputeNodeAPI:
                 raise PluginInstallError("SHA-256 stimmt nicht mit dem Installationsplan ueberein.")
             self._install_plans.pop(plan_id)
             try:
-                return self.install_plugin_package(
-                    entry["package"], expected_sha256=entry["sha256"], replace=entry["replace"]
-                )
+                results = []
+                for step in entry["steps"]:
+                    package = Path(step["package_path"])
+                    if hashlib.sha256(package.read_bytes()).hexdigest() != step["sha256"]:
+                        raise PluginInstallError("Installationspaket nach Freigabe veraendert.")
+                    from windows_compute_node.plugins.dependency_plan import (
+                        dependencies as get_plugin_dependencies,
+                    )
+                    manifest = self.plugin_installer.inspect_package(package)
+                    if any(
+                        key == "mediahub.python_runtime"
+                        for key, _ in get_plugin_dependencies(manifest)
+                    ):
+                        self._ensure_managed_python_after_approval()
+                    result = self.install_plugin_package(
+                        package, expected_sha256=step["sha256"], replace=step["replace"],
+                        speech_profile=(
+                            entry["speech_profile"]
+                            if step["plugin_id"] == "mediahub.speech_to_text"
+                            else "cpu"
+                        )
+                    )
+                    results.append(result)
+                    if step["plugin_id"] == "mediahub.python_runtime":
+                        self._ensure_managed_python_after_approval()
+                return {
+                    "installed": True, "installation_steps": results,
+                    "plugins": self.plugin_load_results,
+                }
             finally:
                 shutil.rmtree(entry["directory"], ignore_errors=True)
+
+    def _ensure_managed_python_after_approval(self) -> None:
+        """Provision managed Python only after the single plan confirmation."""
+        from windows_compute_node.runtime_support import python_runtime
+        if python_runtime.inspect_managed_python().get("ready", False):
+            return
+        import importlib.util
+        plugin = self.plugin_installer.plugin_root / "mediahub.python_runtime" / "plugin.py"
+        if not plugin.is_file():
+            raise PluginInstallError("Python-Runtime-Plugin nicht installiert.")
+        spec = importlib.util.spec_from_file_location("mediahub_managed_python_install", plugin)
+        if spec is None or spec.loader is None:
+            raise PluginInstallError("Python-Runtime-Installer nicht ladbar.")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        result = module.install_from_tools_repo(confirmed=True)
+        if not result.get("ready"):
+            raise PluginInstallError("Python Runtime wurde nicht betriebsbereit installiert.")
+        if not python_runtime.inspect_managed_python().get("ready", False):
+            raise PluginInstallError(
+                "Verwaltete Python 3.12.10 Runtime nach Installation nicht bereit."
+            )
 
     def install_plugin_package(
         self,
@@ -259,6 +378,7 @@ class ComputeNodeAPI:
         *,
         expected_sha256: str,
         replace: bool = False,
+        speech_profile: str = "cpu",
     ) -> dict[str, Any]:
         package_path = Path(package_path)
 
@@ -275,6 +395,7 @@ class ComputeNodeAPI:
         result = self.plugin_installer.install(
             package_path,
             replace=replace,
+            speech_profile=speech_profile,
         )
 
         loaded = self.reload_plugins()
@@ -621,7 +742,10 @@ class RequestHandler(
                 return
 
             try:
-                result = self.api.create_install_plan(safe_name, body, expected_sha256, replace)
+                result = self.api.create_install_plan(
+                    safe_name, body, expected_sha256, replace,
+                    str(self.headers.get("X-Speech-Install-Profile", "cpu")).strip().lower(),
+                )
 
             except PluginInstallError as error:
                 self._send_json(
