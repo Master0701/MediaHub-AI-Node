@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import importlib.util
 import json
 import os
@@ -9,6 +10,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import urllib.request
 import zipfile
 from pathlib import Path
 from typing import Any
@@ -71,13 +73,16 @@ class ComputePluginInstaller:
         status = manager.inspect_runtime()
         acceleration = manager.inspect_acceleration() if status.get("ready") else {}
         matching = bool(status.get("ready")) and (
-            bool(acceleration.get("cuda_available")) if profile == "cuda"
+            bool(acceleration.get("cuda_available"))
+            if profile == "cuda"
             else not bool(acceleration.get("cuda_built"))
         )
         if matching:
             return {
-                **status, "install_profile": selection,
-                "acceleration": acceleration, "reused": True,
+                **status,
+                "install_profile": selection,
+                "acceleration": acceleration,
+                "reused": True,
             }
 
         # An existing runtime is user data: do not silently replace or migrate it.
@@ -137,8 +142,7 @@ class ComputePluginInstaller:
                 )
             if requested == "cpu" and torch.get("cuda_runtime"):
                 raise PluginInstallError(
-                    "Vorhandene SmolVLM2-Runtime nutzt CUDA; "
-                    "keine automatische Ueberschreibung."
+                    "Vorhandene SmolVLM2-Runtime nutzt CUDA; keine automatische Ueberschreibung."
                 )
             return {**existing, "reused": True}
         root = manager.runtime_root()
@@ -155,10 +159,9 @@ class ComputePluginInstaller:
             ) from exc
         if not installed.get("ready"):
             raise PluginInstallError("SmolVLM2-Runtime wurde installiert, ist aber nicht bereit.")
-        if (
-            (requested == "cuda" or installed.get("selected_backend") == "cuda")
-            and not (installed.get("torch") or {}).get("cuda_available")
-        ):
+        if (requested == "cuda" or installed.get("selected_backend") == "cuda") and not (
+            installed.get("torch") or {}
+        ).get("cuda_available"):
             raise PluginInstallError(
                 "SmolVLM2-CUDA-Runtime ist nach Installation nicht verfuegbar."
             )
@@ -174,9 +177,12 @@ class ComputePluginInstaller:
         if not isinstance(tools, list):
             raise PluginInstallError("SmolVLM2 required_tools fehlt oder ist ungueltig.")
         matching = [
-            item for item in tools
-            if isinstance(item, dict) and item.get("id") == "smolvlm2-model"
-                    and (not item.get("targets") or "windows_compute" in item["targets"])]
+            item
+            for item in tools
+            if isinstance(item, dict)
+            and item.get("id") == "smolvlm2-model"
+            and (not item.get("targets") or "windows_compute" in item["targets"])
+        ]
         if (
             len(matching) != 1
             or matching[0].get("required") is not True
@@ -203,8 +209,13 @@ class ComputePluginInstaller:
             except RuntimeError:
                 existing = None
             if existing is not None:
-                return {"ready": True, "model_path": str(existing), "reused": True,
-                        "tool_id": "smolvlm2-model", "source": "mediahub_tools"}
+                return {
+                    "ready": True,
+                    "model_path": str(existing),
+                    "reused": True,
+                    "tool_id": "smolvlm2-model",
+                    "source": "mediahub_tools",
+                }
             installed = manager.install_model(models_root)
             verified = manager.resolve_model_path(models_root)
             if not installed.get("installed") or not installed.get("ready"):
@@ -383,23 +394,33 @@ class ComputePluginInstaller:
         if (
             not isinstance(repository, str)
             or not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repository)
-                or not isinstance(directory, str) or not re.fullmatch(r"[A-Za-z0-9_.-]+", directory)
-                or directory in {".", ".."}):
+            or not isinstance(directory, str)
+            or not re.fullmatch(r"[A-Za-z0-9_.-]+", directory)
+            or directory in {".", ".."}
+        ):
             raise PluginInstallError("Ungueltige Modellquelle oder Modellverzeichnis.")
         if model.get("installation") != "during_plugin_install":
             raise PluginInstallError("Unbekannte Modell-Installationsart.")
         required = model.get("required_files")
-        if not isinstance(required, list) or not required or not all(
-            isinstance(name, str)
-            and re.fullmatch(r"[A-Za-z0-9_.-]+", name)
-            and name not in {".", ".."}
-            for name in required
+        if (
+            not isinstance(required, list)
+            or not required
+            or not all(
+                isinstance(name, str)
+                and re.fullmatch(r"[A-Za-z0-9_.-]+", name)
+                and name not in {".", ".."}
+                for name in required
+            )
         ):
             raise PluginInstallError("Modell-Pflichtdateien muessen sichere Dateinamen sein.")
         weight_files = model.get("weight_files")
-        if not isinstance(weight_files, list) or not weight_files or not all(
-            isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9_.-]+", name)
-            for name in weight_files
+        if (
+            not isinstance(weight_files, list)
+            or not weight_files
+            or not all(
+                isinstance(name, str) and re.fullmatch(r"[A-Za-z0-9_.-]+", name)
+                for name in weight_files
+            )
         ):
             raise PluginInstallError("Modell-Gewichtsdateien fehlen oder sind ungueltig.")
         offline_loader = model.get("offline_loader")
@@ -439,6 +460,54 @@ class ComputePluginInstaller:
                 for name in weight_files
             )
 
+        def prepare_local_tokenizer(path: Path) -> None:
+            """Expose bundled tokenizer files at the root expected by GLiNER."""
+            if offline_loader != "gliner":
+                return
+            nested = path / "tokenizer"
+            if not nested.is_dir():
+                return
+            for filename in ("tokenizer_config.json", "spm.model", "config.json"):
+                source = nested / filename
+                destination = path / filename
+                if not source.is_file() or source.stat().st_size == 0:
+                    raise PluginInstallError(f"GLiNER-Tokenizer-Datei fehlt: {source}")
+                if destination.exists():
+                    if destination.read_bytes() != source.read_bytes():
+                        raise PluginInstallError(
+                            f"Abweichende GLiNER-Tokenizer-Datei vorhanden: {destination}"
+                        )
+                    continue
+                shutil.copyfile(source, destination)
+
+        def prepare_local_backbone(path: Path) -> None:
+            """Keep the backbone configuration beside GLiNER, not in a user HF cache."""
+            if offline_loader != "gliner":
+                return
+            config_file = path / "gliner_config.json"
+            config = json.loads(config_file.read_text(encoding="utf-8"))
+            source = config.get("model_name")
+            if source != "microsoft/mdeberta-v3-base" and not (
+                isinstance(source, str) and Path(source).name == "backbone"
+            ):
+                raise PluginInstallError(f"Unerwartetes GLiNER-Backbone: {source!r}")
+            backbone = path / "backbone"
+            backbone.mkdir(exist_ok=True)
+            backbone_config = backbone / "config.json"
+            if not backbone_config.is_file():
+                if source != "microsoft/mdeberta-v3-base":
+                    raise PluginInstallError("Lokale GLiNER-Backbone-Konfiguration fehlt.")
+                url = "https://huggingface.co/microsoft/mdeberta-v3-base/resolve/main/config.json"
+                urllib.request.urlretrieve(url, backbone_config)
+            data = json.loads(backbone_config.read_text(encoding="utf-8"))
+            if data.get("model_type") != "deberta-v2":
+                raise PluginInstallError("Ungueltige DeBERTa-Backbone-Konfiguration.")
+            config["model_name"] = str(backbone.resolve())
+            config_file.write_text(
+                json.dumps(config, ensure_ascii=False, indent=2) + "\n",
+                encoding="utf-8",
+            )
+
         def offline_check(path: Path) -> None:
             if offline_loader is None:
                 return
@@ -449,16 +518,22 @@ class ComputePluginInstaller:
             )
             result = subprocess.run(
                 [str(python), "-c", script, str(path)],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                check=False, timeout=600,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+                timeout=600,
                 env={**runtime_env, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"},
             )
             if result.returncode:
                 raise PluginInstallError(
                     "Modell kann nicht vollstaendig offline geladen werden "
                     + f"(Exit-Code {result.returncode}). "
-                    + "STDOUT: " + (result.stdout or "<leer>")[-3000:]
-                    + " STDERR: " + (result.stderr or "<leer>")[-5000:]
+                    + "STDOUT: "
+                    + (result.stdout or "<leer>")[-3000:]
+                    + " STDERR: "
+                    + (result.stderr or "<leer>")[-5000:]
                 )
 
         if target.exists():
@@ -466,32 +541,97 @@ class ComputePluginInstaller:
                 raise PluginInstallError(
                     f"Vorhandenes Modell unvollstaendig; keine Ueberschreibung: {target}"
                 )
+            prepare_local_tokenizer(target)
+            prepare_local_backbone(target)
             offline_check(target)
             return {"ready": True, "path": str(target), "reused": True}
         if stage.exists():
             raise PluginInstallError(f"Vorhandenes Modell-Staging bitte pruefen: {stage}")
         models.mkdir(parents=True, exist_ok=True)
-        script = (
-            "import sys\n"
-            "from huggingface_hub import snapshot_download\n"
-            "snapshot_download(repo_id=sys.argv[1], local_dir=sys.argv[2], max_workers=2)\n"
-        )
         try:
-            result = subprocess.run(
-                [str(python), "-c", script, repository, str(stage)],
-                capture_output=True, text=True, encoding="utf-8", errors="replace",
-                check=False, timeout=3600,
-                env={**runtime_env, "HF_HUB_OFFLINE": "0", "TRANSFORMERS_OFFLINE": "0"},
-            )
-            if result.returncode:
-                raise PluginInstallError(
-                    "Modell-Download fehlgeschlagen: "
-                    + (result.stderr or result.stdout or "Unbekannter Fehler")[-1600:]
+            if manifest.get("id") == "mediahub.gliner":
+                # Use the existing shared MediaHub_Tools model asset, not a HF cache.
+                release = (
+                    "https://github.com/Master0701/MediaHub_Tools/releases/download/mediahub-tools/"
                 )
+                with tempfile.TemporaryDirectory(prefix="mediahub-gliner-model-") as temp:
+                    temp_root = Path(temp)
+                    manifest_path = temp_root / "gliner-manifest.json"
+                    urllib.request.urlretrieve(release + manifest_path.name, manifest_path)
+                    tools_manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+                    if tools_manifest.get("tool") != "gliner-runtime":
+                        raise PluginInstallError("Ungueltiges MediaHub_Tools-GLiNER-Manifest.")
+                    asset = tools_manifest.get("model")
+                    if not isinstance(asset, dict):
+                        raise PluginInstallError("GLiNER-Modell fehlt im MediaHub_Tools-Manifest.")
+                    filename = asset.get("package")
+                    expected_sha = asset.get("sha256")
+                    expected_size = asset.get("size")
+                    if (
+                        filename != "GLiNER-Model-gliner_multi-v2.1.zip"
+                        or not isinstance(expected_sha, str)
+                        or not re.fullmatch(r"[0-9a-fA-F]{64}", expected_sha)
+                        or not isinstance(expected_size, int)
+                        or expected_size <= 0
+                    ):
+                        raise PluginInstallError("Ungueltige GLiNER-Modell-Assetdaten.")
+                    archive_path = temp_root / filename
+                    urllib.request.urlretrieve(release + filename, archive_path)
+                    if archive_path.stat().st_size != expected_size:
+                        raise PluginInstallError("GLiNER-Modell-ZIP: Dateigroesse stimmt nicht.")
+                    digest = hashlib.sha256()
+                    with archive_path.open("rb") as handle:
+                        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+                            digest.update(chunk)
+                    if digest.hexdigest().lower() != expected_sha.lower():
+                        raise PluginInstallError(
+                            "GLiNER-Modell-ZIP: SHA256-Pruefung fehlgeschlagen."
+                        )
+                    stage.mkdir(parents=True, exist_ok=False)
+                    with zipfile.ZipFile(archive_path) as archive:
+                        root_resolved = stage.resolve()
+                        for member in archive.infolist():
+                            destination = (stage / member.filename).resolve()
+                            if not destination.is_relative_to(root_resolved):
+                                raise PluginInstallError("Unsicherer Pfad im GLiNER-Modell-ZIP.")
+                            if (member.external_attr >> 16) & 0o170000 == 0o120000:
+                                raise PluginInstallError("Symbolischer Link im GLiNER-Modell-ZIP.")
+                        archive.extractall(stage)
+            else:
+                script = (
+                    "import sys\n"
+                    "from huggingface_hub import snapshot_download\n"
+                    "snapshot_download(repo_id=sys.argv[1], local_dir=sys.argv[2], max_workers=2)\n"
+                )
+                result = subprocess.run(
+                    [str(python), "-c", script, repository, str(stage)],
+                    capture_output=True,
+                    text=True,
+                    encoding="utf-8",
+                    errors="replace",
+                    check=False,
+                    timeout=3600,
+                    env={**runtime_env, "HF_HUB_OFFLINE": "0", "TRANSFORMERS_OFFLINE": "0"},
+                )
+                if result.returncode:
+                    raise PluginInstallError(
+                        "Modell-Download fehlgeschlagen: "
+                        + (result.stderr or result.stdout or "Unbekannter Fehler")[-1600:]
+                    )
             if not validate(stage):
                 raise PluginInstallError("Modell heruntergeladen, aber Pflichtdateien fehlen.")
+            prepare_local_tokenizer(stage)
+            prepare_local_backbone(stage)
             offline_check(stage)
             stage.rename(target)
+            # The model is now at its final path. Never leave a staging path
+            # embedded in the GLiNER configuration used by later API jobs.
+            try:
+                prepare_local_backbone(target)
+                offline_check(target)
+            except Exception:
+                # Keep the failed install inspectable; do not report it ready.
+                raise
             return {"ready": True, "path": str(target), "reused": False}
         except subprocess.TimeoutExpired as exc:
             raise PluginInstallError("Zeitlimit bei Modell-Download oder Offline-Test.") from exc
@@ -709,8 +849,8 @@ class ComputePluginInstaller:
                     spec.loader.exec_module(module)
                     if tuple(cuda_packages) != tuple(module.CUDA_RUNTIME_PACKAGES):
                         raise PluginInstallError(
-                "Speech-CUDA-Paketversionen stimmen nicht ueberein."
-            )
+                            "Speech-CUDA-Paketversionen stimmen nicht ueberein."
+                        )
                     try:
                         cuda_status = module.inspect_cuda_runtime(Path(runtime_status["root"]))
                         if not cuda_status.get("ready"):
@@ -724,7 +864,9 @@ class ComputePluginInstaller:
                             f"Speech-CUDA-Installation fehlgeschlagen: {exc}"
                         ) from exc
                     runtime_status = {
-                        **runtime_status, "cuda": cuda_status, "install_profile": "cuda"
+                        **runtime_status,
+                        "cuda": cuda_status,
+                        "install_profile": "cuda",
                     }
                 else:
                     runtime_status = {**(runtime_status or {}), "install_profile": "cpu"}
