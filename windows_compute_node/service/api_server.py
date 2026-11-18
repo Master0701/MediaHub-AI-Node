@@ -47,6 +47,7 @@ from windows_compute_node.security.api_token import (
 from windows_compute_node.security.pairing import (
     PairingManager,
 )
+from windows_compute_node.service.interaktions_ki_web_service import InteraktionsKIWebService
 from windows_compute_node.service.runtime_status import (
     ComputeNodeRuntimeStatus,
 )
@@ -106,6 +107,7 @@ class ComputeNodeAPI:
         )
 
         self.plugin_load_results = self.plugin_loader.load_all()
+        self.interaktions_ki_web = InteraktionsKIWebService(self)
 
         self.activity = NodeActivityController(
             idle_timeout_seconds=900.0,
@@ -119,6 +121,9 @@ class ComputeNodeAPI:
         self,
     ) -> list[dict[str, Any]]:
         """Lädt Plugin- und Worker-Runtime vollständig neu."""
+
+        self.interaktions_ki_web.stop()
+        self.plugin_loader.shutdown_all()
 
         self.workers = WorkerRegistry()
 
@@ -135,6 +140,7 @@ class ComputeNodeAPI:
         )
 
         self.plugin_load_results = self.plugin_loader.load_all()
+        self.interaktions_ki_web.start()
 
         self.activity.sleep_callback = self.plugin_loader.sleep_all
         self.activity.wake_callback = self.plugin_loader.wake_all
@@ -165,8 +171,110 @@ class ComputeNodeAPI:
                 self._install_plans.pop(plan_id, None)
                 shutil.rmtree(entry["directory"], ignore_errors=True)
 
+    @staticmethod
+    def _download_interaktions_ki_asset(asset: str, destination: Path) -> None:
+        """Download through Windows PowerShell, without buffering large assets in RAM."""
+        import base64
+        import subprocess
+
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+", asset):
+            raise PluginInstallError("Ungueltiger MediaHub-Tools-Assetname.")
+        url = (
+            "https://github.com/Master0701/MediaHub_Tools/releases/download/mediahub-tools/" + asset
+        )
+        # Windows PowerShell's HTTP stack succeeds on hosts where Python urllib times out.
+        # Encode the command to avoid nested quote escaping and Unicode path problems.
+        script = (
+            "$ErrorActionPreference='Stop'; $ProgressPreference='SilentlyContinue'; "
+            "[Net.ServicePointManager]::SecurityProtocol=[Net.SecurityProtocolType]::Tls12; "
+            "Invoke-WebRequest -UseBasicParsing -Uri '" + url + "' "
+            "-OutFile '" + str(destination).replace("'", "''") + "'"
+        )
+        encoded = base64.b64encode(script.encode("utf-16-le")).decode("ascii")
+        try:
+            result = subprocess.run(
+                ["powershell.exe", "-NoProfile", "-NonInteractive", "-EncodedCommand", encoded],
+                capture_output=True,
+                text=True,
+                timeout=3600,
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            destination.unlink(missing_ok=True)
+            raise PluginInstallError(
+                "MediaHub-Tools-Download nicht abgeschlossen: " + asset
+            ) from exc
+        if result.returncode != 0 or not destination.is_file() or destination.stat().st_size == 0:
+            destination.unlink(missing_ok=True)
+            raise PluginInstallError(
+                "MediaHub-Tools-Download fehlgeschlagen: "
+                + asset
+                + ": "
+                + (result.stderr or result.stdout)[-700:]
+            )
+
+    def _stage_interaktions_ki_tools(self, directory: Path, profile: str) -> dict[str, Any]:
+        """Create a metadata-only plan; ZIP downloads require explicit confirmation."""
+        import subprocess
+
+        if profile not in {"auto", "cpu", "cuda"}:
+            raise PluginInstallError("Interaktions-KI-Profil muss auto, cpu oder cuda sein.")
+        manifest_file = directory / "interaktions_ki_manifest.json"
+        self._download_interaktions_ki_asset("interaktions-ki-manifest.json", manifest_file)
+        try:
+            tool_manifest = json.loads(manifest_file.read_text(encoding="utf-8-sig"))
+        except (OSError, ValueError) as exc:
+            raise PluginInstallError("Interaktions-KI-Release-Manifest ungueltig.") from exc
+        if (
+            tool_manifest.get("tool") != "interaktions-ki"
+            or tool_manifest.get("status") != "release"
+            or tool_manifest.get("installation") != "local-only-explicit-approval"
+        ):
+            raise PluginInstallError("Interaktions-KI-Release-Manifest nicht freigegeben.")
+        has_cuda = False
+        try:
+            gpu = subprocess.run(
+                ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+                capture_output=True,
+                text=True,
+                timeout=8,
+                check=False,
+            )
+            has_cuda = gpu.returncode == 0 and bool(gpu.stdout.strip())
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+        if profile == "cuda" and not has_cuda:
+            raise PluginInstallError("CUDA angefordert, aber keine NVIDIA-GPU verfuegbar.")
+        selected = "cuda" if profile == "cuda" or (profile == "auto" and has_cuda) else "cpu"
+        runtime = (tool_manifest.get("runtime") or {}).get("packages", {}).get(selected)
+        model = tool_manifest.get("model")
+        if not isinstance(runtime, dict) or not isinstance(model, dict):
+            raise PluginInstallError("Runtime-/Modell-Eintrag im Release-Manifest fehlt.")
+        pinned = {}
+        for name, item in (("runtime", runtime), ("model", model)):
+            filename = item.get("package")
+            digest = str(item.get("sha256") or "").lower()
+            if (
+                not isinstance(filename, str)
+                or not re.fullmatch(r"[A-Za-z0-9_.-]+\.zip", filename)
+                or not re.fullmatch(r"[a-f0-9]{64}", digest)
+            ):
+                raise PluginInstallError("Ungueltiger Interaktions-KI-Paketeintrag.")
+            pinned[name] = {
+                "path": str(directory / ("interaktions_ki_" + name + ".zip")),
+                "sha256": digest,
+                "package": filename,
+            }
+        return {"profile_requested": profile, "profile_selected": selected, "packages": pinned}
+
     def create_install_plan(
-        self, filename: str, body: bytes, sha256: str, replace: bool, speech_profile: str = "cpu"
+        self,
+        filename: str,
+        body: bytes,
+        sha256: str,
+        replace: bool,
+        speech_profile: str = "cpu",
+        interaktions_ki_profile: str = "auto",
     ) -> dict[str, Any]:
         expected = sha256.strip().lower()
         if not re.fullmatch(r"[0-9a-f]{64}", expected):
@@ -239,6 +347,7 @@ class ComputeNodeAPI:
                     dependencies as get_plugin_dependencies,
                 )
                 from windows_compute_node.runtime_support import python_runtime
+
                 needs_managed_python = any(
                     dep_id == "mediahub.python_runtime"
                     for step in staged_steps
@@ -250,6 +359,11 @@ class ComputeNodeAPI:
                     needs_managed_python = not python_runtime.inspect_managed_python().get(
                         "ready", False
                     )
+                ki_tools = (
+                    self._stage_interaktions_ki_tools(directory, interaktions_ki_profile)
+                    if plugin_id == "mediahub.interaktions_ki"
+                    else None
+                )
                 response = {
                     "status": "plan_created",
                     "plan_id": plan_id,
@@ -279,9 +393,29 @@ class ComputeNodeAPI:
                         ],
                         "managed_python_download": (
                             "MediaHub_Tools CPython 3.12.10 x64 (HTTPS, verified SHA256)"
-                            if needs_managed_python else None
+                            if needs_managed_python
+                            else None
                         ),
                         "confirmation_count": 1,
+                        "interaktions_ki_tools": (
+                            {
+                                "profile_requested": ki_tools["profile_requested"],
+                                "profile_selected": ki_tools["profile_selected"],
+                                "packages": {
+                                    k: {"package": v["package"], "sha256": v["sha256"]}
+                                    for k, v in ki_tools["packages"].items()
+                                },
+                            }
+                            if ki_tools
+                            else None
+                        ),
+                        "interaktions_ki_approval": (
+                            "Runtime und Modell werden erst nach Planbestaetigung installiert; "
+                            "lokales Tool-Manifest und CPU/CUDA-Profil muessen "
+                            "separat geprueft werden."
+                            if plugin_id == "mediahub.interaktions_ki"
+                            else None
+                        ),
                     },
                 }
                 self._install_plans[plan_id] = {
@@ -291,6 +425,10 @@ class ComputeNodeAPI:
                     "replace": replace,
                     "steps": staged_steps,
                     "needs_managed_python": needs_managed_python,
+                    "interaktions_ki_tools": ki_tools,
+                    "interaktions_ki_plugin_id": (
+                        plugin_id if plugin_id == "mediahub.interaktions_ki" else None
+                    ),
                     "speech_profile": (
                         speech_profile if plugin_id == "mediahub.speech_to_text" else "cpu"
                     ),
@@ -318,6 +456,18 @@ class ComputeNodeAPI:
                 raise PluginInstallError("SHA-256 stimmt nicht mit dem Installationsplan ueberein.")
             self._install_plans.pop(plan_id)
             try:
+                ki_tools = entry.get("interaktions_ki_tools")
+                if ki_tools:
+                    # Only after approval: download both archives from the pinned release.
+                    for item in ki_tools["packages"].values():
+                        destination = Path(item["path"])
+                        self._download_interaktions_ki_asset(item["package"], destination)
+                        with destination.open("rb") as handle:
+                            if hashlib.file_digest(handle, "sha256").hexdigest() != item["sha256"]:
+                                destination.unlink(missing_ok=True)
+                                raise PluginInstallError(
+                                    "Interaktions-KI-Download SHA256 falsch: " + item["package"]
+                                )
                 results = []
                 for step in entry["steps"]:
                     package = Path(step["package_path"])
@@ -326,6 +476,7 @@ class ComputeNodeAPI:
                     from windows_compute_node.plugins.dependency_plan import (
                         dependencies as get_plugin_dependencies,
                     )
+
                     manifest = self.plugin_installer.inspect_package(package)
                     if any(
                         key == "mediahub.python_runtime"
@@ -333,18 +484,28 @@ class ComputeNodeAPI:
                     ):
                         self._ensure_managed_python_after_approval()
                     result = self.install_plugin_package(
-                        package, expected_sha256=step["sha256"], replace=step["replace"],
+                        package,
+                        expected_sha256=step["sha256"],
+                        replace=step["replace"],
                         speech_profile=(
                             entry["speech_profile"]
                             if step["plugin_id"] == "mediahub.speech_to_text"
                             else "cpu"
-                        )
+                        ),
+                        interaktions_ki_approved=(
+                            entry["interaktions_ki_plugin_id"] == "mediahub.interaktions_ki"
+                            and step["plugin_id"] == "mediahub.interaktions_ki"
+                        ),
+                        interaktions_ki_tools=(
+                            ki_tools if step["plugin_id"] == "mediahub.interaktions_ki" else None
+                        ),
                     )
                     results.append(result)
                     if step["plugin_id"] == "mediahub.python_runtime":
                         self._ensure_managed_python_after_approval()
                 return {
-                    "installed": True, "installation_steps": results,
+                    "installed": True,
+                    "installation_steps": results,
                     "plugins": self.plugin_load_results,
                 }
             finally:
@@ -353,9 +514,11 @@ class ComputeNodeAPI:
     def _ensure_managed_python_after_approval(self) -> None:
         """Provision managed Python only after the single plan confirmation."""
         from windows_compute_node.runtime_support import python_runtime
+
         if python_runtime.inspect_managed_python().get("ready", False):
             return
         import importlib.util
+
         plugin = self.plugin_installer.plugin_root / "mediahub.python_runtime" / "plugin.py"
         if not plugin.is_file():
             raise PluginInstallError("Python-Runtime-Plugin nicht installiert.")
@@ -379,6 +542,8 @@ class ComputeNodeAPI:
         expected_sha256: str,
         replace: bool = False,
         speech_profile: str = "cpu",
+        interaktions_ki_approved: bool = False,
+        interaktions_ki_tools: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         package_path = Path(package_path)
 
@@ -396,6 +561,8 @@ class ComputeNodeAPI:
             package_path,
             replace=replace,
             speech_profile=speech_profile,
+            interaktions_ki_approved=interaktions_ki_approved,
+            interaktions_ki_tools=interaktions_ki_tools,
         )
 
         loaded = self.reload_plugins()
@@ -660,8 +827,7 @@ class RequestHandler(
                 {
                     "error": "install_plan_required",
                     "detail": (
-                        "Direkte Installation deaktiviert. "
-                        "/plugins/plan und /confirm verwenden."
+                        "Direkte Installation deaktiviert. /plugins/plan und /confirm verwenden."
                     ),
                 },
             )
@@ -743,8 +909,12 @@ class RequestHandler(
 
             try:
                 result = self.api.create_install_plan(
-                    safe_name, body, expected_sha256, replace,
+                    safe_name,
+                    body,
+                    expected_sha256,
+                    replace,
                     str(self.headers.get("X-Speech-Install-Profile", "cpu")).strip().lower(),
+                    str(self.headers.get("X-Interaktions-KI-Profile", "auto")).strip().lower(),
                 )
 
             except PluginInstallError as error:
@@ -1273,6 +1443,29 @@ class RequestHandler(
                 "</div>"
             )
 
+        web_status = self.api.interaktions_ki_web.status()
+        web_rows = []
+        for label, key, error_key in (
+            ("Lokaler Chat (127.0.0.1:8768)", "http", "http_error"),
+            ("HTTPS im Heimnetz (8769)", "https", "https_error"),
+        ):
+            state = str(web_status[key])
+            error = str(web_status.get(error_key) or "")
+            web_rows.append(
+                '<div class="plugin-row"><div class="plugin-info">'
+                f"<strong>{html_lib.escape(label)}</strong>"
+                f"<span>{html_lib.escape(state)}</span>"
+                + (f'<div class="plugin-error">{html_lib.escape(error)}</div>' if error else "")
+                + "</div></div>"
+            )
+        if web_status.get("error") and not any(
+            web_status.get(k) for k in ("http_error", "https_error")
+        ):
+            web_rows.append(
+                '<div class="plugin-error">' + html_lib.escape(str(web_status["error"])) + "</div>"
+            )
+        web_status_html = "".join(web_rows)
+
         plugins_html = "".join(plugin_rows)
 
         if not plugins_html:
@@ -1589,6 +1782,10 @@ h1 {{
         </div>
         {plugins_html}
     </section>
+    <section class="plugin-status-section">
+        <div class="plugin-status-title">Interaktions-KI Webserver</div>
+        {web_status_html}
+    </section>
     <div class="footer">
         Lokale Statusseite · API-Token wird nicht angezeigt.
     </div>
@@ -1682,10 +1879,13 @@ def run_server(
 
     try:
         api.activity.start_watcher()
+        api.interaktions_ki_web.start()
         server.serve_forever()
     except KeyboardInterrupt:
         print()
         print("Compute-Node API wird beendet.")
     finally:
         api.activity.stop_watcher()
+        api.interaktions_ki_web.stop()
+        api.plugin_loader.shutdown_all()
         server.server_close()

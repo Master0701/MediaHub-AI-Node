@@ -1,4 +1,4 @@
-﻿"""Windows system-tray integration for MediaHub Compute Node."""
+"""Windows system-tray integration for MediaHub Compute Node."""
 
 from __future__ import annotations
 
@@ -9,15 +9,19 @@ import threading
 import webbrowser
 from collections.abc import Callable
 from pathlib import Path
+from tkinter import messagebox
 from typing import Any
 
 import pystray
 from PIL import Image
 
+from windows_compute_node.service.https_firewall import firewall_status
+from windows_compute_node.service.https_firewall_setup import request_rule_setup
 from windows_compute_node.tray.custom_menu import ComputeNodeTrayMenu
 from windows_compute_node.tray.gui_host import TkGuiHost
 from windows_compute_node.tray.info_window import ComputeNodeInfoWindow
 from windows_compute_node.tray.status_window import ComputeNodeStatusWindow
+from windows_compute_node.tray.web_credentials_window import WebCredentialsWindow
 from windows_compute_node.tray.windows_tray_icon import MediaHubWindowsIcon
 
 
@@ -39,6 +43,7 @@ class ComputeNodeTray:
         stop_callback: Callable[[], None],
         restart_callback: Callable[[], None],
         base_url: str = "http://127.0.0.1:8766",
+        web_credentials_saved_callback: Callable[[], None] | None = None,
     ) -> None:
         self.icon_path = Path(icon_path)
         self.runtime_dir = Path(runtime_dir)
@@ -86,6 +91,15 @@ class ComputeNodeTray:
             icon_path=self.icon_path,
         )
 
+        self._web_credentials_window = WebCredentialsWindow(
+            gui_host=self._gui_host,
+            credentials_path=self.runtime_dir / "security" / "web_credentials.json",
+            on_saved=web_credentials_saved_callback,
+        )
+
+        self._firewall_prompted = False
+        self._gui_host.register_cleanup(self._cleanup_tk_windows)
+
         self._custom_menu = ComputeNodeTrayMenu(
             gui_host=self._gui_host,
             icon_path=self.icon_path,
@@ -95,10 +109,73 @@ class ComputeNodeTray:
             open_console_callback=self._open_console,
             open_browser_callback=self._open_browser,
             restart_callback=self._restart,
+            web_credentials_callback=self._web_credentials_window.show,
             exit_callback=self._exit,
             info_callback=self._show_info,
             about_callback=self._about_mediahub,
         )
+
+    def _cleanup_tk_windows(self) -> None:
+        """Release all Tk widgets/images on the owning GUI thread."""
+        self._custom_menu._close()
+        self._status_window._close_window()
+        self._info_window._close_window()
+        self._about_window._close_window()
+        window = self._web_credentials_window._window
+        self._web_credentials_window._window = None
+        if window is not None:
+            try:
+                window.destroy()
+            except Exception:
+                pass
+
+    def show_first_run_web_setup(self) -> None:
+        """Show the credential editor once for an unconfigured runtime."""
+        if not self._web_credentials_window.credentials.configured():
+            self._web_credentials_window.show()
+
+    def check_https_firewall_with_consent(self) -> None:
+        """Prompt at most once per process, on the existing Tk GUI thread."""
+        host = os.environ.get("MEDIAHUB_INTERAKTIONS_KI_LAN_HOST", "").strip()
+        if not host or self._firewall_prompted:
+            return
+        self._firewall_prompted = True
+
+        def check_in_background() -> None:
+            # PowerShell must not block the Tk GUI thread.
+            state = firewall_status(host, 8769)
+            if state.get("configured"):
+                return
+            # An unreadable status is not evidence that a rule is missing.
+            if state.get("reason") != "Dedizierte HTTPS-Regel fehlt":
+                return
+
+            def prompt() -> None:
+                answer = messagebox.askyesno(
+                    "MediaHub HTTPS - Windows-Firewall",
+                    "Fuer den HTTPS-Zugriff aus dem privaten Heimnetz fehlt die "
+                    "MediaHub-Firewall-Freigabe.\n\n"
+                    f"Lokale IP: {host}\nPort: TCP 8769\n"
+                    "Zugriff: LocalSubnet, nur Profil Privat\n\n"
+                    "Soll Windows jetzt die Administratorfreigabe anfordern?\n"
+                    "Bestehende Firewall-Regeln bleiben unveraendert.",
+                    parent=self._gui_host.root,
+                )
+                if answer:
+                    # UAC launch remains explicit and consent-gated.
+                    messagebox.showinfo(
+                        "MediaHub HTTPS - Firewall",
+                        request_rule_setup(host, 8769),
+                        parent=self._gui_host.root,
+                    )
+
+            self._gui_host.submit(prompt)
+
+        threading.Thread(
+            target=check_in_background,
+            name="mediahub-https-firewall-check",
+            daemon=True,
+        ).start()
 
     @property
     def log_path(self) -> Path:
@@ -114,6 +191,7 @@ class ComputeNodeTray:
 
     def _show_status(self, _icon: object = None, _item: object = None) -> None:
         self._status_window.show()
+
     def _info_body(self) -> str:
         return (
             "Lokaler Windows-Ausführungsknoten für MediaHub.\\n\\n"
@@ -259,23 +337,16 @@ def restart_current_process() -> None:
             close_fds=True,
         )
     else:
-        python_executable = Path(
-            sys.executable
-        ).resolve()
+        python_executable = Path(sys.executable).resolve()
 
-        pythonw_executable = (
-            python_executable.parent
-            / "pythonw.exe"
-        )
+        pythonw_executable = python_executable.parent / "pythonw.exe"
 
         if pythonw_executable.exists():
             launcher = pythonw_executable
         else:
             launcher = python_executable
 
-        repository_root = Path(
-            __file__
-        ).resolve().parents[2]
+        repository_root = Path(__file__).resolve().parents[2]
 
         subprocess.Popen(
             [

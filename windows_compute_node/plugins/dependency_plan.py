@@ -13,16 +13,23 @@ from typing import Any
 from .installer import PluginInstallError
 
 
-def version(value: str) -> tuple[int, ...]:
-    if not re.fullmatch(r"[0-9]+(?:\.[0-9]+)*", value):
+def version(value: str) -> tuple[tuple[int, ...], bool]:
+    """Numeric version and optional -dev suffix; -dev precedes its final release."""
+    match = re.fullmatch(r"([0-9]+(?:\.[0-9]+)*)(-dev)?", value)
+    if not match:
         raise PluginInstallError(f"Ungueltige Plugin-Version: {value}")
-    return tuple(map(int, value.split(".")))
+    return tuple(map(int, match.group(1).split("."))), bool(match.group(2))
 
 
 def compatible(actual: str, minimum: str) -> bool:
-    a, b = version(actual), version(minimum)
+    a, a_dev = version(actual)
+    b, b_dev = version(minimum)
     size = max(len(a), len(b))
-    return a + (0,) * (size - len(a)) >= b + (0,) * (size - len(b))
+    padded_a = a + (0,) * (size - len(a))
+    padded_b = b + (0,) * (size - len(b))
+    if padded_a != padded_b:
+        return padded_a > padded_b
+    return not a_dev or b_dev
 
 
 def dependencies(manifest: dict[str, Any]):

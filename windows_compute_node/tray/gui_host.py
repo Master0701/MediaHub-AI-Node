@@ -20,6 +20,7 @@ class TkGuiHost:
         self._ready = threading.Event()
         self._stopping = threading.Event()
         self._stopped = threading.Event()
+        self._cleanup_callbacks: list[Callable[[], None]] = []
 
     @property
     def root(self) -> tk.Tk:
@@ -52,6 +53,10 @@ class TkGuiHost:
             return
         self.start()
         self._queue.put(callback)
+
+    def register_cleanup(self, callback: Callable[[], None]) -> None:
+        """Register GUI-thread cleanup, executed before Tk interpreter destruction."""
+        self._cleanup_callbacks.append(callback)
 
     def stop(
         self,
@@ -116,6 +121,13 @@ class TkGuiHost:
         try:
             root.mainloop()
         finally:
+            # Release widget and PhotoImage references on their owning Tk thread.
+            for callback in self._cleanup_callbacks:
+                try:
+                    callback()
+                except Exception:
+                    import logging
+                    logging.getLogger(__name__).exception("Tk cleanup failed")
             try:
                 root.destroy()
             except tk.TclError:

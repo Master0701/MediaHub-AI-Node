@@ -689,6 +689,8 @@ class ComputePluginInstaller:
         *,
         replace: bool = False,
         speech_profile: str = "cpu",
+        interaktions_ki_approved: bool = False,
+        interaktions_ki_tools: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         package_path = Path(package_path)
 
@@ -823,6 +825,34 @@ class ComputePluginInstaller:
                 runtime_status = self._prepare_gliner_runtime(manifest, package_root)
             elif plugin_id == "mediahub.smolvlm2":
                 runtime_status = self._prepare_smolvlm2_runtime(manifest, package_root)
+            elif plugin_id == "mediahub.interaktions_ki":
+                # Installation occurs only inside the existing approved plugin
+                # installation flow. The adapter refuses missing trusted inputs.
+                adapter_path = package_root / "node_install_adapter.py"
+                if not adapter_path.is_file():
+                    raise PluginInstallError("Interaktions-KI-Installationsadapter fehlt.")
+                spec = importlib.util.spec_from_file_location(
+                    "mediahub_interaktions_ki_install_adapter", adapter_path
+                )
+                if spec is None or spec.loader is None:
+                    raise PluginInstallError("Interaktions-KI-Adapter nicht ladbar.")
+                adapter = importlib.util.module_from_spec(spec)
+                spec.loader.exec_module(adapter)
+                if interaktions_ki_approved is not True:
+                    raise PluginInstallError(
+                        "Interaktions-KI: ausdrueckliche Freigabe fuer Runtime und Modell fehlt. "
+                        "Installationsplan anzeigen und erst danach "
+                        "interaktions_ki_approved=True uebergeben."
+                    )
+                try:
+                    runtime_status = adapter.prepare_runtime(
+                        manifest, package_root, approved=interaktions_ki_approved,
+                        pinned_tools=interaktions_ki_tools
+                    )
+                except Exception as exc:
+                    raise PluginInstallError(
+                        f"Interaktions-KI-Runtime konnte nicht vorbereitet werden: {exc}"
+                    ) from exc
             else:
                 runtime_status = self._prepare_isolated_runtime(manifest)
             if plugin_id == "mediahub.speech_to_text":

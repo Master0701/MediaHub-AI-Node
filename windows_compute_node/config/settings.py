@@ -20,6 +20,10 @@ DEFAULT_SETTINGS: dict[str, Any] = {
         "require_authentication": True,
         "allow_remote_jobs": True,
     },
+    "lan_https": {
+        "mode": "auto",
+        "host": "",
+    },
 }
 
 

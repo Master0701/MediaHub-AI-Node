@@ -21,6 +21,7 @@ from windows_compute_node.hardware.capabilities import (
 from windows_compute_node.service.api_server import (
     create_server,
 )
+from windows_compute_node.service.lan_address import resolve_lan_host
 from windows_compute_node.tray.tray_app import (
     ComputeNodeTray,
     restart_current_process,
@@ -177,6 +178,19 @@ def _configure_logging(runtime: Path) -> Path:
     return log_path
 
 
+def _on_web_credentials_saved(api, settings, logger):
+    try:
+        host = resolve_lan_host(
+            settings.get("lan_https", {}),
+            os.environ.get("MEDIAHUB_INTERAKTIONS_KI_LAN_HOST", ""),
+        )
+        if host:
+            os.environ["MEDIAHUB_INTERAKTIONS_KI_LAN_HOST"] = host
+            api.interaktions_ki_web.start_lan()
+    except ValueError as exc:
+        logger.error("LAN HTTPS: %s", exc)
+
+
 def main() -> int:
     runtime = _runtime_dir()
     runtime.mkdir(
@@ -212,6 +226,27 @@ def main() -> int:
         runtime / "settings.json"
     ).load()
 
+    # Select LAN HTTPS IP before starting the web bridge and tray.
+    from windows_compute_node.security.web_credentials import NodeWebCredentials
+    credentials = NodeWebCredentials(runtime / "security" / "web_credentials.json")
+    if credentials.configured():
+        try:
+            lan_host = resolve_lan_host(
+                settings.get("lan_https", {}),
+                os.environ.get("MEDIAHUB_INTERAKTIONS_KI_LAN_HOST", ""),
+            )
+            if lan_host:
+                os.environ["MEDIAHUB_INTERAKTIONS_KI_LAN_HOST"] = lan_host
+                logger.info("LAN HTTPS IP: %s", lan_host)
+            else:
+                os.environ.pop("MEDIAHUB_INTERAKTIONS_KI_LAN_HOST", None)
+                logger.warning("LAN HTTPS: keine geeignete IPv4")
+        except ValueError as exc:
+            os.environ.pop("MEDIAHUB_INTERAKTIONS_KI_LAN_HOST", None)
+            logger.error("LAN HTTPS: %s", exc)
+    else:
+        os.environ.pop("MEDIAHUB_INTERAKTIONS_KI_LAN_HOST", None)
+
     capabilities = get_capabilities()
 
     host = str(
@@ -236,6 +271,7 @@ def main() -> int:
 
     server_thread.start()
     api.activity.start_watcher()
+    api.interaktions_ki_web.start()
 
     logger.info(
         "Compute-Node-API gestartet: %s:%s",
@@ -260,6 +296,8 @@ def main() -> int:
         )
 
         api.activity.stop_watcher()
+        api.interaktions_ki_web.stop()
+        api.plugin_loader.shutdown_all()
         server.shutdown()
         server.server_close()
 
@@ -299,10 +337,14 @@ def main() -> int:
         pairing_status_provider=api.pairing.status,
         stop_callback=stop_node,
         restart_callback=restart_node,
+        web_credentials_saved_callback=lambda: _on_web_credentials_saved(api, settings, logger),
         base_url=(
             f"http://127.0.0.1:{port}"
         ),
     )
+
+    tray.show_first_run_web_setup()
+    tray.check_https_firewall_with_consent()
 
     try:
         logger.info(

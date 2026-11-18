@@ -1,5 +1,40 @@
 # Changelog
 
+## MediaHub-AI-Node v0.9.0 – Release-Vorbereitung (17.11.2026)
+
+- Gemeinsame AI-Node-Version von v0.8.29 auf v0.9.0 angehoben.
+- Windows Compute Node wird separat als v0.2.0 geführt; keine Änderung des Raspberry-Pi-Online-Installers.
+- Gemeinsame Release-Notizen enthalten die Windows-Interaktions-KI-Erweiterungen.
+
+
+## Windows Compute Node v0.2.0 – Interaktions-KI und LAN-HTTPS (Release-Vorbereitung, 17.11.2026)
+
+### Neue Funktionen seit Beginn der Interaktions-KI-Integration
+- Windows Compute Node als separater, optionaler Ausführungsknoten für MediaHub; Raspberry-Pi-AI-Node und dessen Online-Installer bleiben unabhängig.
+- Einbindung des separat installierbaren AI-Node-Plugins `mediahub.interaktions_ki` v0.1.12 über die bestätigte Plugin-Installationsplanung und die Node-API.
+- Plugin-Web-Bridge mit lokalem HTTP-Zugriff unter `http://127.0.0.1:8768/` sowie automatischem LAN-HTTPS-Zugriff unter `https://<LAN-IP>:8769/`.
+- LAN-IPv4-Ermittlung anhand der Standardroute; Konfigurationsmodi `auto`, `manual` und `disabled`; explizite Umgebungsvariablen bleiben als Overrides verfügbar.
+- TLS-Zertifikat und Schlüssel werden bei fehlenden expliziten TLS-Dateipfaden durch die Node in ihrem eigenen Sicherheitsverzeichnis erzeugt bzw. verwaltet.
+- HTTPS-Webzugriff nur nach lokaler Einrichtung von Zugangsdaten; Authentifizierung schützt die LAN-Oberfläche.
+- Start und Ende der Web-Bridge in den Node-/Plugin-Lebenszyklus integriert; kontrolliertes Stoppen bei Node-Ende und Plugin-Reload.
+- Lokaler llama.cpp/GGUF-Chat über CPU und CUDA mit getrennten Ausführungsprofilen und tatsächlichem Backend-Nachweis.
+- Weiterverwendung der sicheren lokalen, SHA256-geprüften Installationskette für llama.cpp-Runtime und GGUF-Modell; kein ungefragter Cloud- oder Modell-Download.
+
+### Verifizierte Nullinstallation am 17.11.2026
+- Compute-Node-EXE v0.1.6 (Buildstand vor der Versionsanhebung), SHA256 `14C77FC342F5EB12FAC9612588054B1790767EFEE905D99A8691CEFD5513769F`.
+- Interaktions-KI v0.1.12 über API-Installationsplan installiert und aktiviert.
+- HTTP 8768: Status 200; HTTPS 8769: ohne Zugangsdaten 401, mit falschem Passwort 401, mit gültigen Zugangsdaten 200.
+- Echte CPU-Chat-Inferenz bestanden (`owned_llama_process_cpu_mode_gpu_layers_0`).
+- Echte CUDA-Chat-Inferenz bestanden (`llama_cpp_startup_log_offloaded_layers`).
+- Ports 8766, 8767, 8768 und 8769 nach Testende freigegeben; vorhandene Windows-Firewallregel nicht verändert oder gelöscht; temporäre Test-Zugangsdaten entfernt.
+- Gemeinsamer Nulltest v1.0.19 erfolgreich; v1.0.20 ergänzt die auswählbare Node-EXE und ist noch auf Windows erneut auszuführen.
+
+### Release-Grenzen
+- Die neue Versionsnummer v0.2.0 ist eine **Quellcode-/Release-Vorbereitung**, noch kein neu gebautes, installiertes oder veröffentlichtes v0.2.0-Paket.
+- Vor GitHub-Veröffentlichung: Build und Installer mit v0.2.0, Lizenzprüfung, vollständige Tests, SHA256-Dateien und Release-Notizen über den bestehenden Release-Assistenten kontrollieren.
+- Der Raspberry-Pi-Online-Installer bleibt unverändert; keine automatische Firewallregel-Veränderung.
+
+
 ## v0.8.25
 
 - Plugin-Installationsverwaltung für GLiNER und SmolVLM2 verbessert.

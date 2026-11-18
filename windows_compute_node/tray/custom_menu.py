@@ -40,6 +40,7 @@ class ComputeNodeTrayMenu:
         open_console_callback: Callable[[], None],
         open_browser_callback: Callable[[], None],
         restart_callback: Callable[[], None],
+        web_credentials_callback: Callable[[], None],
         exit_callback: Callable[[], None],
         info_callback: Callable[[], None],
         about_callback: Callable[[], None],
@@ -53,6 +54,7 @@ class ComputeNodeTrayMenu:
         self.open_console_callback = open_console_callback
         self.open_browser_callback = open_browser_callback
         self.restart_callback = restart_callback
+        self.web_credentials_callback = web_credentials_callback
         self.exit_callback = exit_callback
         self.info_callback = info_callback
         self.about_callback = about_callback
@@ -138,6 +140,13 @@ class ComputeNodeTrayMenu:
                 fill=fg,
                 width=line,
             )
+
+        elif kind == "security":
+            draw.rounded_rectangle(
+                (p(5), p(9), p(17), p(19)), radius=p(2), outline=blue, width=line
+            )
+
+            draw.arc((p(7), p(3), p(15), p(14)), 180, 360, fill=fg, width=line)
 
         elif kind == "restart":
             draw.arc(
@@ -327,14 +336,8 @@ class ComputeNodeTrayMenu:
             connected = bool(status.get("connected", False))
 
             if working:
-                job_type = str(
-                    status.get("active_job_type") or ""
-                ).strip()
-                label = (
-                    f"Arbeitet: {job_type}"
-                    if job_type
-                    else "Arbeitet"
-                )
+                job_type = str(status.get("active_job_type") or "").strip()
+                label = f"Arbeitet: {job_type}" if job_type else "Arbeitet"
             elif connected:
                 label = "Verbunden"
 
@@ -342,9 +345,7 @@ class ComputeNodeTrayMenu:
                 self._status_label.configure(text=label)
 
             if self._status_dot is not None:
-                self._status_dot.configure(
-                    fg=GREEN if connected or working else ACCENT
-                )
+                self._status_dot.configure(fg=GREEN if connected or working else ACCENT)
 
             root.after(750, self._refresh_status)
         except tk.TclError:
@@ -384,9 +385,7 @@ class ComputeNodeTrayMenu:
             header.pack_propagate(False)
 
             try:
-                logo_image = Image.open(
-                    self.icon_path
-                ).convert("RGBA")
+                logo_image = Image.open(self.icon_path).convert("RGBA")
                 logo_image.thumbnail((46, 46))
 
                 logo = ImageTk.PhotoImage(logo_image)
@@ -484,6 +483,12 @@ class ComputeNodeTrayMenu:
                 callback=self.open_browser_callback,
             )
 
+            self._menu_row(
+                outer,
+                text="Webzugang verwalten",
+                icon="security",
+                callback=self.web_credentials_callback,
+            )
             self._divider(outer)
 
             self._menu_row(
@@ -532,9 +537,7 @@ class ComputeNodeTrayMenu:
                 min(y - height, screen_height - height - 6),
             )
 
-            root.geometry(
-                f"{width}x{height}+{left}+{top}"
-            )
+            root.geometry(f"{width}x{height}+{left}+{top}")
 
             def close_if_focus_lost(_event: object) -> None:
                 root.after(100, self._check_focus)

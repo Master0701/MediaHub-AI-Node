@@ -155,3 +155,18 @@ Ein Release darf nur erstellt werden, wenn jede direkte Abhängigkeit aus `requi
 - Für die verwendete Inno-Setup-Installation gelten die Lizenzbedingungen des Herstellers.
 - Der derzeit verwendete Compiler meldet `Non-commercial use only`.
 - Vor einer kommerziellen Nutzung oder kommerziellen Veröffentlichung muss daher eine dafür geeignete Inno-Setup-Lizenz vorhanden sein.
+
+## Interaktions-KI: zusätzliche optionale Laufzeitkomponenten (Windows Compute Node)
+
+| Komponente | Verwendung | Lizenz / Hinweis | Verteilung |
+|---|---|---|---|
+| llama.cpp / llama-server | lokale GGUF-Inferenz (CPU und CUDA) | MIT; maßgeblich sind Lizenz und Notices der tatsächlich eingesetzten Version | nicht als Bestandteil des Node-Quellcodes vorausgesetzt; lokale, geprüfte Archive |
+| GGUF-Modell | lokale Sprachgenerierung | **modellabhängig**; Lizenz, Nutzungsbedingungen, Herkunft und eventuelle Einschränkungen für jedes konkrete Modell separat prüfen | nicht im Repository oder Plugin gebündelt |
+| NVIDIA CUDA / Treiber und Runtime-Bibliotheken | optionale GPU-Beschleunigung | NVIDIA-Lizenzbedingungen der jeweils eingesetzten Komponenten; keine pauschale MIT-Lizenz | abhängig von vorhandener GPU und gewähltem Runtime-Paket |
+| Python-Standardbibliothek (`ssl`, `http.server`, `hashlib`, `socket`) | HTTPS, Authentifizierung, Netzwerk und Prüfungen | Python Software Foundation License; zugrundeliegende OpenSSL-Komponenten nach ihrer jeweiligen Lizenz | über die verwendete Python-/EXE-Distribution |
+
+Vor einem Release sind die **konkret gebündelten** Fremdkomponenten anhand der Build-Artefakte auf Original-Lizenztexte, NOTICE-Dateien und Weitergabebedingungen zu prüfen. Die MIT-Angabe für `llama.cpp` gilt nicht automatisch für Modelle, CUDA oder jedes fremde Binärpaket. Die vorhandene zentrale Lizenzsammlung bleibt bestehen.
+
+## Windows Compute Node: optionale Interaktions-KI
+
+Die Interaktions-KI v0.1.12 verwendet separat installierte llama.cpp-Runtime (MIT, https://github.com/ggml-org/llama.cpp), modellabhängig lizenzierte GGUF-Dateien und optional NVIDIA/CUDA mit gesonderten Lizenzbedingungen. Vor Verteilung von Runtime-Binärdateien sind die tatsächlich enthaltenen Lizenz- und Drittanbieterhinweise zu prüfen. Der Raspberry-Pi-Online-Installer bleibt unverändert.

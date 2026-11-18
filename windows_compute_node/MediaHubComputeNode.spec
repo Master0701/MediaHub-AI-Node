@@ -26,6 +26,10 @@ a = Analysis(
     ],
     hiddenimports=[
         "pystray._win32",
+        "sqlite3",
+        "_sqlite3",
+        "cryptography",
+        "cryptography.hazmat.bindings._rust",
     ],
     hookspath=[],
     hooksconfig={},

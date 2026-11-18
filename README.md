@@ -203,3 +203,11 @@ Ein gemeinsames GitHub-Release kann beispielsweise enthalten:
 
 - MediaHub-AI-Node `v0.8.x`
 - MediaHub Compute Node für Windows `v0.1.x`
+
+## Interaktions-KI im Windows Compute Node (v0.2.0 – vorbereitet)
+
+Das optionale Plugin `mediahub.interaktions_ki` v0.1.12 stellt lokale Chat-Inferenz mit llama.cpp/GGUF bereit. Die Windows-Node-API läuft standardmäßig auf Port 8766; die Interaktions-KI-Weboberfläche nutzt lokal HTTP auf Port 8768 und nach Einrichtung der Web-Zugangsdaten im Heimnetz HTTPS auf Port 8769. Die Node kann die private IPv4-Adresse automatisch anhand der Standardroute erkennen und ein eigenes TLS-Zertifikat erzeugen. Der HTTPS-Zugriff ist passwortgeschützt. CPU- und CUDA-Inferenz sowie die Web-Authentifizierung wurden am 17.11.2026 im Nulltest nachgewiesen.
+
+Die Interaktions-KI wird als separates `.mhaiplugin` installiert, nicht fest in die EXE integriert. Die lokale Modell-/Runtime-Installation benötigt vorher bereitgestellte, SHA256-geprüfte Archive und eine ausdrückliche Bestätigung. Eine automatische Installation fremder Software allein durch den Chat findet nicht statt.
+
+**Versionshinweis:** v0.2.0 ist derzeit nur für den nächsten Windows-Build vorbereitet; die bestandenen Nulltests verwendeten noch die v0.1.6-EXE. Siehe [Release-Vorbereitung](RELEASE_NOTES_PENDING.md) und [Drittanbieter-Lizenzen](THIRD_PARTY_LICENSES.md).
